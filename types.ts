@@ -2,6 +2,13 @@
 export type ProficiencyRank = 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
 export type ItemType = 'weapon' | 'armor' | 'utility' | 'consumable';
 
+export interface XpLog {
+  id: string;
+  timestamp: number;
+  description: string;
+  cost: number;
+}
+
 export interface Attribute {
   name: string;
   value: number;
@@ -13,7 +20,7 @@ export interface Attribute {
 export interface Skill {
   name: string;
   rank: ProficiencyRank;
-  initialRank: ProficiencyRank; // Rank em que a perícia foi adicionada (custo 0)
+  initialRank?: ProficiencyRank; // Se definido, o custo até este rank é 0
   relatedAttribute: string;
   initialBonus: number;
   isDiscounted?: boolean;
@@ -22,9 +29,9 @@ export interface Skill {
 export interface Spell {
   name: string;
   rank: ProficiencyRank;
-  initialRank: ProficiencyRank; // Rank em que a magia foi adicionada (custo 0)
+  initialRank?: ProficiencyRank; // Se definido, o custo até este rank é 0
   cost: string;
-  description: string; // Nova descrição da magia
+  description: string;
   origin: 'learned' | 'created';
   isDiscounted?: boolean;
 }
@@ -39,7 +46,7 @@ export interface Item {
   id: string;
   name: string;
   type: ItemType;
-  damage?: string; // Ex: "1d8 + 4"
+  damage?: string;
   defense?: number;
   description: string;
   specialAbility?: string;
@@ -63,4 +70,5 @@ export interface CharacterData {
   inventory: Item[];
   spells: Spell[];
   abilities: Ability[];
+  xpLog: XpLog[];
 }

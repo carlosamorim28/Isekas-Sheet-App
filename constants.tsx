@@ -23,7 +23,8 @@ export const INITIAL_CHARACTER_DATA: CharacterData = {
   skills: [],
   inventory: [],
   spells: [],
-  abilities: []
+  abilities: [],
+  xpLog: []
 };
 
 export const RANK_BONUS: Record<string, number> = {
