@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { INITIAL_CHARACTER_DATA, RANK_BONUS, RANK_NAMES, OFFICIAL_SKILL_LIST } from './constants';
 import { AttributeCard, calculateMod } from './components/AttributeCard';
@@ -133,6 +132,8 @@ const App: React.FC = () => {
   const hpMax = useMemo(() => 20 + (5 * getAttrMod('Constituição')) + activeChar.hp.extraMax, [activeChar.attributes, activeChar.hp.extraMax]);
   const mpMax = useMemo(() => 200 + (20 * getAttrMod('Mana')) + activeChar.mp.extraMax, [activeChar.attributes, activeChar.mp.extraMax]);
 
+  const dexBonus = useMemo(() => getAttrMod('Destreza'), [activeChar.attributes]);
+
   const armorBonus = useMemo(() => {
     return activeChar.inventory
       .filter(item => item.type === 'armor' && item.isEquipped)
@@ -145,7 +146,7 @@ const App: React.FC = () => {
     return selectedSkill ? RANK_BONUS[selectedSkill.rank] : 0;
   }, [activeChar.skills, activeChar.selectedArmorSkillName]);
 
-  const effectiveAc = activeChar.ac + armorBonus + armorSkillBonus;
+  const effectiveAc = activeChar.ac + armorBonus + armorSkillBonus + dexBonus;
 
   // Lista de perícias de armadura disponíveis para seleção
   const availableArmorSkills = useMemo(() => {
@@ -780,6 +781,7 @@ const App: React.FC = () => {
                   <div className="flex flex-col">
                     <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Defesa (CA)</span>
                     <div className="flex flex-col gap-0.5 mt-1">
+                      {dexBonus !== 0 && <span className="text-[8px] text-amber-500 font-bold uppercase">Destreza: +{dexBonus}</span>}
                       {armorBonus > 0 && <span className="text-[8px] text-green-400 font-bold uppercase">Itens: +{armorBonus}</span>}
                       {armorSkillBonus > 0 && <span className="text-[8px] text-indigo-400 font-bold uppercase">Perícia: +{armorSkillBonus}</span>}
                     </div>
