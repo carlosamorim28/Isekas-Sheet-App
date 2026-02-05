@@ -84,8 +84,9 @@ const App: React.FC = () => {
   const [showItemForm, setShowItemForm] = useState(false);
   
   const [isSkillDiscounted, setIsSkillDiscounted] = useState(false);
+  const [isSkillInitialDuringCreation, setIsSkillInitialDuringCreation] = useState(false);
   const [isSpellDiscounted, setIsSpellDiscounted] = useState(false);
-  const [isSpellFreeDuringCreation, setIsSpellFreeDuringCreation] = useState(false);
+  const [isSpellInitialDuringCreation, setIsSpellInitialDuringCreation] = useState(false);
   
   // Novo estado para definir o rank ao adicionar uma perícia
   const [selectedInitialRank, setSelectedInitialRank] = useState<ProficiencyRank>('E');
@@ -103,11 +104,21 @@ const App: React.FC = () => {
 
   const xpSpent = useMemo(() => {
     const attrSpent = activeChar.attributes.reduce((acc, a) => acc + calculateTotalAttrSpent(a.value), 0);
-    const skillSpent = activeChar.skills.reduce((acc, s) => acc + calculateSkillUpgradeOnly(s.rank, s.isDiscounted), 0);
-    const spellSpent = activeChar.spells.reduce((acc, s) => {
-      if (s.isFree) return acc;
-      return acc + getEntryCost('spell', s.origin, s.rank, s.isDiscounted);
+    
+    const skillSpent = activeChar.skills.reduce((acc, s) => {
+      const currentCost = calculateSkillUpgradeOnly(s.rank, s.isDiscounted);
+      // Se for inicial, o custo do rank inicial é 0. O gasto é a diferença.
+      const offset = s.initialRank ? calculateSkillUpgradeOnly(s.initialRank, s.isDiscounted) : 0;
+      return acc + (currentCost - offset);
     }, 0);
+
+    const spellSpent = activeChar.spells.reduce((acc, s) => {
+      const currentCost = getEntryCost('spell', s.origin, s.rank, s.isDiscounted);
+      // Magias também podem ser iniciais
+      const offset = s.initialRank ? getEntryCost('spell', s.origin, s.initialRank, s.isDiscounted) : 0;
+      return acc + (currentCost - offset);
+    }, 0);
+
     return attrSpent + skillSpent + spellSpent;
   }, [activeChar]);
 
@@ -178,7 +189,8 @@ const App: React.FC = () => {
     }
     const newSkill: Skill = {
       name: skill.name,
-      rank: selectedInitialRank, // Usa o rank selecionado no painel
+      rank: selectedInitialRank,
+      initialRank: isSkillInitialDuringCreation ? selectedInitialRank : 'E', // Se for inicial, o rank atual é o offset
       relatedAttribute: skill.attr,
       initialBonus: 0,
       isDiscounted: isSkillDiscounted
@@ -191,16 +203,30 @@ const App: React.FC = () => {
   const handleAddSpell = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const rank = formData.get('rank') as ProficiencyRank;
     const newSpell: Spell = {
       name: formData.get('name') as string,
-      rank: formData.get('rank') as ProficiencyRank,
+      rank: rank,
+      initialRank: isSpellInitialDuringCreation ? rank : 'E',
       cost: formData.get('cost') as string,
+      description: formData.get('description') as string,
       origin: formData.get('origin') as 'learned' | 'created',
-      isDiscounted: isSpellDiscounted,
-      isFree: isSpellFreeDuringCreation
+      isDiscounted: isSpellDiscounted
     };
     updateActiveChar({ ...activeChar, spells: [...activeChar.spells, newSpell] });
     setShowSpellForm(false);
+  };
+
+  const handleAddAbility = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const newAbility: Ability = {
+      name: formData.get('name') as string,
+      description: formData.get('description') as string,
+      origin: 'learned'
+    };
+    updateActiveChar({ ...activeChar, abilities: [...activeChar.abilities, newAbility] });
+    setShowAbilityForm(false);
   };
 
   const handleAddItem = (e: React.FormEvent<HTMLFormElement>) => {
@@ -489,6 +515,9 @@ const App: React.FC = () => {
                     <button onClick={() => setIsSkillDiscounted(!isSkillDiscounted)} className={`text-[8px] px-2 py-1 rounded font-bold border ${isSkillDiscounted ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
                       50% OFF
                     </button>
+                    <button onClick={() => setIsSkillInitialDuringCreation(!isSkillInitialDuringCreation)} className={`text-[8px] px-2 py-1 rounded font-bold border ${isSkillInitialDuringCreation ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
+                      INICIAL (Grátis)
+                    </button>
                     <button onClick={() => setShowSkillSelect(!showSkillSelect)} className="bg-amber-600 text-[10px] px-3 py-1 rounded font-bold hover:bg-amber-500">+ ADICIONAR PERÍCIA</button>
                   </div>
                 )}
@@ -497,13 +526,13 @@ const App: React.FC = () => {
               {showSkillSelect && isEditing && (
                 <div className="mb-6 p-4 bg-slate-900/80 rounded-xl border border-amber-500/20 space-y-6">
                   <div className="flex flex-col gap-2">
-                    <span className="text-[8px] uppercase font-bold text-slate-500">Rank Inicial para Novas Perícias:</span>
+                    <span className="text-[8px] uppercase font-bold text-slate-500">Rank Selecionado:</span>
                     <div className="flex flex-wrap gap-2">
                       {(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(rank => (
                         <button 
                           key={rank}
                           onClick={() => setSelectedInitialRank(rank)}
-                          className={`px-3 py-1 rounded text-[9px] font-bold border transition-all ${selectedInitialRank === rank ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-amber-500/40'}`}
+                          className={`px-3 py-1 rounded text-[9px] font-bold border transition-all ${selectedInitialRank === rank ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-amber-500/40'}`}
                         >
                           {rank} - {RANK_NAMES[rank]}
                         </button>
@@ -559,11 +588,15 @@ const App: React.FC = () => {
                 {activeChar.skills.map((skill, idx) => {
                   const bonus = RANK_BONUS[skill.rank] + skill.initialBonus;
                   const attrMod = getAttrMod(skill.relatedAttribute);
+                  const isActuallyInitial = skill.initialRank !== 'E';
                   return (
-                    <div key={idx} className="flex flex-col p-4 bg-slate-800/30 rounded-xl border border-slate-700/30 hover:border-amber-500/20 transition-all">
+                    <div key={idx} className={`flex flex-col p-4 bg-slate-800/30 rounded-xl border transition-all ${isActuallyInitial ? 'border-green-500/20' : 'border-slate-700/30 hover:border-amber-500/20'}`}>
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute} {skill.isDiscounted ? '(Desc.)' : ''}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute} {skill.isDiscounted ? '(Desc.)' : ''}</span>
+                            {isActuallyInitial && <span className="text-[6px] bg-green-600 text-white px-1 rounded uppercase font-bold">Inicial (RK {skill.initialRank})</span>}
+                          </div>
                           <h4 className="text-slate-100 font-bold text-sm">{skill.name}</h4>
                         </div>
                         <div className="bg-slate-900 px-3 py-1 rounded border border-amber-500/10 text-center">
@@ -595,6 +628,48 @@ const App: React.FC = () => {
                   );
                 })}
                 {activeChar.skills.length === 0 && <div className="col-span-2 text-center py-8 text-slate-600 italic text-sm">Nenhuma perícia aprendida.</div>}
+              </div>
+            </section>
+
+            {/* HABILIDADES DO PERSONAGEM */}
+            <section className="glass-panel p-6 rounded-2xl border-amber-500/10">
+              <div className="flex justify-between items-center mb-6 border-b border-amber-500/10 pb-2">
+                <h2 className="text-xl font-medieval text-amber-200">⚔️ Habilidades</h2>
+                {isEditing && (
+                  <button onClick={() => setShowAbilityForm(!showAbilityForm)} className="bg-indigo-600 text-[10px] px-3 py-1 rounded font-bold">+ NOVA HABILIDADE</button>
+                )}
+              </div>
+
+              {showAbilityForm && isEditing && (
+                <form onSubmit={handleAddAbility} className="mb-8 p-6 bg-slate-900/50 rounded-xl border border-amber-500/20 space-y-4">
+                  <input name="name" placeholder="Nome da Habilidade" required className="w-full bg-slate-800 p-2 rounded text-xs text-white border border-slate-700" />
+                  <textarea name="description" placeholder="Descrição da habilidade..." required className="w-full bg-slate-800 p-2 rounded text-xs text-white border border-slate-700 h-24" />
+                  <button type="submit" className="w-full bg-indigo-600 py-2 rounded font-bold text-xs uppercase tracking-widest">Adicionar Habilidade</button>
+                </form>
+              )}
+
+              <div className="space-y-4">
+                {activeChar.abilities.map((ability, idx) => (
+                  <div key={idx} className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-amber-500/30 transition-all flex flex-col">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="text-amber-200 font-bold font-cinzel text-base">{ability.name}</h4>
+                      {isEditing && (
+                        <button 
+                          onClick={() => {
+                            const n = [...activeChar.abilities];
+                            n.splice(idx, 1);
+                            updateActiveChar({...activeChar, abilities: n});
+                          }}
+                          className="text-[9px] text-red-500 font-bold hover:underline"
+                        >
+                          REMOVER
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-300 leading-relaxed">{ability.description}</p>
+                  </div>
+                ))}
+                {activeChar.abilities.length === 0 && <div className="text-center py-8 text-slate-600 italic text-sm">Nenhuma habilidade especial registrada.</div>}
               </div>
             </section>
 
@@ -748,12 +823,17 @@ const App: React.FC = () => {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-medieval text-indigo-300">۞ Grimório</h2>
                 {isEditing && (
-                  <button 
-                    onClick={() => setShowSpellForm(!showSpellForm)}
-                    className="text-[10px] px-2 py-1 bg-indigo-600 rounded font-bold hover:bg-indigo-500"
-                  >
-                    + NOVA MAGIA
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => setIsSpellDiscounted(!isSpellDiscounted)} className={`text-[8px] px-2 py-1 rounded font-bold border ${isSpellDiscounted ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
+                      50% OFF
+                    </button>
+                    <button 
+                      onClick={() => setShowSpellForm(!showSpellForm)}
+                      className="text-[10px] px-2 py-1 bg-indigo-600 rounded font-bold hover:bg-indigo-500"
+                    >
+                      + NOVA MAGIA
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -766,6 +846,7 @@ const App: React.FC = () => {
                         {(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <option key={r} value={r}>{r} - {RANK_NAMES[r]}</option>)}
                      </select>
                    </div>
+                   <textarea name="description" placeholder="Descrição da magia..." required className="w-full bg-slate-800 p-2 rounded text-[10px] text-white border border-slate-700 h-16" />
                    <div className="grid grid-cols-2 gap-2">
                      <select name="origin" className="bg-slate-800 p-2 rounded text-[10px] text-white border border-slate-700">
                         <option value="learned">Aprendida</option>
@@ -774,12 +855,12 @@ const App: React.FC = () => {
                      <div className="flex items-center gap-2 px-1">
                         <input 
                           type="checkbox" 
-                          id="isFree"
-                          checked={isSpellFreeDuringCreation}
-                          onChange={(e) => setIsSpellFreeDuringCreation(e.target.checked)}
+                          id="isInitialSpell"
+                          checked={isSpellInitialDuringCreation}
+                          onChange={(e) => setIsSpellInitialDuringCreation(e.target.checked)}
                           className="w-3 h-3"
                         />
-                        <label htmlFor="isFree" className="text-[10px] text-indigo-300 font-bold uppercase">Gratuita?</label>
+                        <label htmlFor="isInitialSpell" className="text-[10px] text-indigo-300 font-bold uppercase">Inicial (Grátis)?</label>
                      </div>
                    </div>
                    <button type="submit" className="w-full bg-indigo-600 py-1.5 rounded font-bold text-[10px] uppercase">ADICIONAR AO LIVRO</button>
@@ -787,32 +868,38 @@ const App: React.FC = () => {
               )}
 
               <div className="space-y-3">
-                {activeChar.spells.map((spell, idx) => (
-                  <div key={idx} className={`bg-indigo-950/20 p-3 rounded-xl border flex justify-between items-center ${spell.isFree ? 'border-green-500/30' : 'border-indigo-500/10'}`}>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-indigo-300 font-bold text-xs">{spell.name}</h4>
-                        {spell.isFree && <span className="text-[6px] bg-green-600 text-white px-1 rounded uppercase font-bold">Free</span>}
+                {activeChar.spells.map((spell, idx) => {
+                  const isActuallyInitial = spell.initialRank !== 'E';
+                  return (
+                    <div key={idx} className={`bg-indigo-950/20 p-3 rounded-xl border flex flex-col gap-2 ${isActuallyInitial ? 'border-green-500/30' : 'border-indigo-500/10'}`}>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-indigo-300 font-bold text-xs">{spell.name} {spell.isDiscounted ? '(Desc.)' : ''}</h4>
+                            {isActuallyInitial && <span className="text-[6px] bg-green-600 text-white px-1 rounded uppercase font-bold">Inicial (RK {spell.initialRank})</span>}
+                          </div>
+                          <span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[8px] bg-indigo-900/40 text-indigo-200 px-2 py-1 rounded font-bold uppercase">RK {spell.rank}</span>
+                          {isEditing && (
+                            <button 
+                              onClick={() => {
+                                const n = [...activeChar.spells];
+                                n.splice(idx, 1);
+                                updateActiveChar({...activeChar, spells: n});
+                              }} 
+                              className="text-[7px] text-red-500 hover:underline"
+                            >
+                              Remover
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span>
+                      <p className="text-[10px] text-slate-400 italic leading-tight">{spell.description}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-[8px] bg-indigo-900/40 text-indigo-200 px-2 py-1 rounded font-bold uppercase">RK {spell.rank}</span>
-                      {isEditing && (
-                        <button 
-                          onClick={() => {
-                            const n = [...activeChar.spells];
-                            n.splice(idx, 1);
-                            updateActiveChar({...activeChar, spells: n});
-                          }} 
-                          className="text-[7px] text-red-500 hover:underline"
-                        >
-                          Remover
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {activeChar.spells.length === 0 && <div className="text-center py-4 text-slate-600 italic text-xs">Nenhum feitiço conhecido.</div>}
               </div>
             </section>

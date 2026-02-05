@@ -13,6 +13,7 @@ export interface Attribute {
 export interface Skill {
   name: string;
   rank: ProficiencyRank;
+  initialRank: ProficiencyRank; // Rank em que a perícia foi adicionada (custo 0)
   relatedAttribute: string;
   initialBonus: number;
   isDiscounted?: boolean;
@@ -21,10 +22,11 @@ export interface Skill {
 export interface Spell {
   name: string;
   rank: ProficiencyRank;
+  initialRank: ProficiencyRank; // Rank em que a magia foi adicionada (custo 0)
   cost: string;
+  description: string; // Nova descrição da magia
   origin: 'learned' | 'created';
   isDiscounted?: boolean;
-  isFree?: boolean;
 }
 
 export interface Ability {
