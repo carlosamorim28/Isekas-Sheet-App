@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { INITIAL_CHARACTER_DATA, RANK_BONUS, RANK_NAMES, OFFICIAL_SKILL_LIST } from './constants';
 import { AttributeCard, calculateMod } from './components/AttributeCard';
