@@ -2,9 +2,11 @@
 import { CharacterData } from './types';
 
 export const INITIAL_CHARACTER_DATA: CharacterData = {
+  id: crypto.randomUUID(),
   name: "",
+  folder: "Geral",
   totalXp: 0,
-  xp: 0, // Este campo será calculado reativamente no App.tsx
+  xp: 0,
   age: 0,
   gender: "Não Definido",
   attributes: [

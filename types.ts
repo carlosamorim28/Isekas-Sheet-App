@@ -55,7 +55,9 @@ export interface Item {
 }
 
 export interface CharacterData {
+  id: string; // Adicionado ID para facilitar referências
   name: string;
+  folder?: string; // Campo para organização por pastas
   avatar?: string;
   totalXp: number;
   xp: number;     
