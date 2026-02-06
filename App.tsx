@@ -462,7 +462,22 @@ const App: React.FC = () => {
                         const log = { id: crypto.randomUUID(), timestamp: Date.now(), description: `Melhoria Atributo: ${attr.name} (${attr.value} → ${attr.value + 1})`, cost };
                         updateActiveChar({ ...activeChar, attributes: newAttributes, xpLog: [log, ...(activeChar.xpLog || [])] });
                       }
-                    }} 
+                    }}
+                    onDowngrade={() => {
+                      if (attr.value > 0) {
+                        const refund = getAttrXPCostForNextPoint(attr.value - 1);
+                        const newAttributes = activeChar.attributes.map((a, i) => 
+                          i === idx ? { ...a, value: a.value - 1 } : a
+                        );
+                        const log = { 
+                          id: crypto.randomUUID(), 
+                          timestamp: Date.now(), 
+                          description: `Reversão Atributo: ${attr.name} (${attr.value} → ${attr.value - 1}) (Reembolso de ${refund} XP)`, 
+                          cost: -refund 
+                        };
+                        updateActiveChar({ ...activeChar, attributes: newAttributes, xpLog: [log, ...(activeChar.xpLog || [])] });
+                      }
+                    }}
                     onRacialChange={(val) => { 
                       const newAttributes = activeChar.attributes.map((a, i) => 
                         i === idx ? { ...a, racialBonus: val } : a

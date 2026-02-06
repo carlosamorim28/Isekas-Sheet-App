@@ -7,6 +7,7 @@ interface Props {
   onRoll: (name: string, bonus: number) => void;
   isEditing: boolean;
   onUpgrade: () => void;
+  onDowngrade: () => void;
   onRacialChange: (val: number) => void;
   xpCost: number;
   canAfford: boolean;
@@ -18,7 +19,7 @@ export const calculateMod = (val: number) => {
   return Math.floor(val / 10);
 };
 
-export const AttributeCard: React.FC<Props> = ({ attr, onRoll, isEditing, onUpgrade, onRacialChange, xpCost, canAfford }) => {
+export const AttributeCard: React.FC<Props> = ({ attr, onRoll, isEditing, onUpgrade, onDowngrade, onRacialChange, xpCost, canAfford }) => {
   // O modificador é calculado sobre a SOMA do valor base + bônus racial
   const totalValue = attr.value + attr.racialBonus;
   const mod = calculateMod(totalValue);
@@ -55,13 +56,23 @@ export const AttributeCard: React.FC<Props> = ({ attr, onRoll, isEditing, onUpgr
               className="w-full bg-slate-800 text-center text-xs rounded border border-slate-700 text-green-400 py-1"
             />
           </div>
-          <button 
-            onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
-            disabled={!canAfford}
-            className={`w-full text-[10px] font-bold py-2 rounded transition-colors ${canAfford ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
-          >
-            UP (+1 BASE) <br/> <span className="text-[8px]">{xpCost} XP</span>
-          </button>
+          <div className="flex gap-1 w-full">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onDowngrade(); }}
+              disabled={attr.value <= 0}
+              className={`w-8 text-[10px] font-bold rounded transition-colors ${attr.value > 0 ? 'bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-800/50' : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'}`}
+              title="Reverter ponto"
+            >
+              -
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
+              disabled={!canAfford}
+              className={`flex-1 text-[10px] font-bold py-2 rounded transition-colors ${canAfford ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
+            >
+              UP (+1 BASE) <br/> <span className="text-[8px]">{xpCost} XP</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div 
