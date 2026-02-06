@@ -582,7 +582,7 @@ const App: React.FC = () => {
                 {activeChar.abilities.map((ab, idx) => (
                   <div key={idx} className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-amber-500/30 transition-all">
                     <h4 className="text-amber-200 font-bold font-cinzel text-base">{ab.name}</h4>
-                    <p className="text-sm text-slate-300 leading-relaxed mt-1">{ab.description}</p>
+                    <p className="text-sm text-slate-300 leading-relaxed mt-1 whitespace-pre-wrap">{ab.description}</p>
                     {isEditing && <button onClick={() => { const n = activeChar.abilities.filter((_, i) => i !== idx); updateActiveChar({...activeChar, abilities: n}); }} className="mt-2 text-[8px] text-red-500 uppercase font-bold hover:underline">Remover</button>}
                   </div>
                 ))}
@@ -620,7 +620,7 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     {item.defense ? <div className="text-[9px] text-green-400 font-bold mb-1">🛡️ Defesa +{item.defense}</div> : null}
-                    {item.description && <p className="text-[10px] text-slate-400 italic mt-1 leading-tight border-l-2 border-slate-600/30 pl-2 mb-2 line-clamp-3 group-hover:line-clamp-none transition-all">{item.description}</p>}
+                    {item.description && <p className="text-[10px] text-slate-400 italic mt-1 leading-tight border-l-2 border-slate-600/30 pl-2 mb-2 line-clamp-3 group-hover:line-clamp-none transition-all whitespace-pre-wrap">{item.description}</p>}
                     {isEditing && <button onClick={() => { const n = activeChar.inventory.filter(i => i.id !== item.id); updateActiveChar({...activeChar, inventory: n}); }} className="mt-auto text-[8px] text-red-500 self-end font-bold uppercase hover:underline pt-2">Descartar</button>}
                   </div>
                 ))}
@@ -694,7 +694,7 @@ const App: React.FC = () => {
                       <div><h4 className="text-indigo-300 font-bold text-xs">{spell.name} {spell.isDiscounted ? '(Desc.)' : ''}</h4><span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span></div>
                       <span className="text-[8px] bg-indigo-900/40 px-2 py-1 rounded font-bold border border-indigo-700/50">RK {spell.rank}</span>
                     </div>
-                    {spell.description && <p className="text-[9px] text-slate-400 mt-1 italic leading-tight border-l-2 border-indigo-500/20 pl-2">"{spell.description}"</p>}
+                    {spell.description && <p className="text-[9px] text-slate-400 mt-1 italic leading-tight border-l-2 border-indigo-500/20 pl-2 whitespace-pre-wrap">"{spell.description}"</p>}
                     {isEditing && <button onClick={() => handleRemoveSpell(idx)} className="text-[7px] text-red-500 mt-2 font-bold uppercase hover:underline">Esquecer</button>}
                   </div>
                 ))}
