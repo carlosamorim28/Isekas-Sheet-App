@@ -188,6 +188,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleRemoveSkill = (idx: number) => {
+    const skill = activeChar.skills[idx];
+    const currentSpent = calculateSkillUpgradeOnly(skill.rank, skill.isDiscounted);
+    const offset = skill.initialRank ? calculateSkillUpgradeOnly(skill.initialRank, skill.isDiscounted) : 0;
+    const refund = currentSpent - offset;
+
+    const newSkills = activeChar.skills.filter((_, i) => i !== idx);
+    const newLogs = refund > 0 ? [{ id: crypto.randomUUID(), timestamp: Date.now(), description: `Remoção de Perícia: ${skill.name} (Reembolso de ${refund} XP)`, cost: -refund }, ...(activeChar.xpLog || [])] : (activeChar.xpLog || []);
+    
+    updateActiveChar({ ...activeChar, skills: newSkills, xpLog: newLogs });
+  };
+
   const handleSelectSkill = (skill: { name: string; attr: string }) => {
     if (!skill.name.trim()) return;
     const initialRank = isSkillInitialDuringCreation ? selectedInitialRank : undefined;
@@ -217,6 +229,18 @@ const App: React.FC = () => {
     const newLogs = cost > 0 ? [{ id: crypto.randomUUID(), timestamp: Date.now(), description: `Aprendizado Magia (${origin === 'created' ? 'Criada' : 'Lida'}): ${newSpell.name} (Rank ${rank})`, cost }, ...(activeChar.xpLog || [])] : (activeChar.xpLog || []);
     updateActiveChar({ ...activeChar, spells: [...activeChar.spells, newSpell], xpLog: newLogs });
     setShowSpellForm(false);
+  };
+
+  const handleRemoveSpell = (idx: number) => {
+    const spell = activeChar.spells[idx];
+    const currentSpent = getEntryCost(spell.origin, spell.rank, spell.isDiscounted);
+    const offset = spell.initialRank ? getEntryCost(spell.origin, spell.initialRank, spell.isDiscounted) : 0;
+    const refund = currentSpent - offset;
+
+    const newSpells = activeChar.spells.filter((_, i) => i !== idx);
+    const newLogs = refund > 0 ? [{ id: crypto.randomUUID(), timestamp: Date.now(), description: `Magia Esquecida: ${spell.name} (Reembolso de ${refund} XP)`, cost: -refund }, ...(activeChar.xpLog || [])] : (activeChar.xpLog || []);
+    
+    updateActiveChar({ ...activeChar, spells: newSpells, xpLog: newLogs });
   };
 
   const handleAddAbility = (e: React.FormEvent<HTMLFormElement>) => {
@@ -477,7 +501,16 @@ const App: React.FC = () => {
                     </div>
                     <div className="mt-auto pt-3 border-t border-slate-700/30 flex items-center justify-between">
                        <span className="text-amber-500 text-[8px] font-bold uppercase tracking-widest">{RANK_NAMES[skill.rank]}</span>
-                       {isEditing ? <button onClick={() => handleUpgradeSkill(idx)} className="text-[9px] px-2 py-1 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition-colors" disabled={skill.rank === 'S'}>UP</button> : <button onClick={() => handleRoll(skill.name, RANK_BONUS[skill.rank] + getAttrMod(skill.relatedAttribute))} className="text-[9px] font-bold text-slate-500 hover:text-amber-500 transition-colors">ROLAR</button>}
+                       <div className="flex gap-2">
+                         {isEditing ? (
+                           <>
+                             <button onClick={() => handleRemoveSkill(idx)} className="text-[9px] px-2 py-1 bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-800/50 rounded font-bold transition-colors">Remover</button>
+                             <button onClick={() => handleUpgradeSkill(idx)} className="text-[9px] px-2 py-1 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition-colors" disabled={skill.rank === 'S'}>UP</button>
+                           </>
+                         ) : (
+                           <button onClick={() => handleRoll(skill.name, RANK_BONUS[skill.rank] + getAttrMod(skill.relatedAttribute))} className="text-[9px] font-bold text-slate-500 hover:text-amber-500 transition-colors">ROLAR</button>
+                         )}
+                       </div>
                     </div>
                   </div>
                 ))}
@@ -569,9 +602,12 @@ const App: React.FC = () => {
               <h2 className="text-xl font-medieval text-amber-200 mb-4 border-b border-amber-500/10 pb-2">📜 Histórico XP</h2>
               <div className="overflow-y-auto pr-2 space-y-3 flex-1 custom-scrollbar">
                 {activeChar.xpLog && activeChar.xpLog.length > 0 ? activeChar.xpLog.map(log => (
-                  <div key={log.id} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 hover:border-amber-500/20 transition-colors">
-                    <div className="flex justify-between items-start text-[9px] mb-1"><span className="text-slate-500">{new Date(log.timestamp).toLocaleDateString()}</span><span className="text-amber-500 font-black">-{log.cost} XP</span></div>
-                    <p className="text-[11px] text-slate-300 leading-tight">{log.description}</p>
+                  <div key={log.id} className={`p-3 rounded-lg border transition-colors ${log.cost < 0 ? 'bg-green-950/20 border-green-500/20' : 'bg-slate-800/40 border-slate-700/50 hover:border-amber-500/20'}`}>
+                    <div className="flex justify-between items-start text-[9px] mb-1">
+                      <span className="text-slate-500">{new Date(log.timestamp).toLocaleDateString()}</span>
+                      <span className={`font-black ${log.cost < 0 ? 'text-green-400' : 'text-amber-500'}`}>{log.cost < 0 ? `+${Math.abs(log.cost)}` : `-${log.cost}`} XP</span>
+                    </div>
+                    <p className={`text-[11px] leading-tight ${log.cost < 0 ? 'text-green-300' : 'text-slate-300'}`}>{log.description}</p>
                   </div>
                 )) : <div className="text-[10px] text-slate-600 italic text-center py-10">Nenhum gasto registrado...</div>}
               </div>
@@ -609,7 +645,7 @@ const App: React.FC = () => {
                       <span className="text-[8px] bg-indigo-900/40 px-2 py-1 rounded font-bold border border-indigo-700/50">RK {spell.rank}</span>
                     </div>
                     {spell.description && <p className="text-[9px] text-slate-400 mt-1 italic leading-tight border-l-2 border-indigo-500/20 pl-2">"{spell.description}"</p>}
-                    {isEditing && <button onClick={() => { const n = activeChar.spells.filter((_, i) => i !== idx); updateActiveChar({...activeChar, spells: n}); }} className="text-[7px] text-red-500 mt-2 font-bold uppercase hover:underline">Esquecer</button>}
+                    {isEditing && <button onClick={() => handleRemoveSpell(idx)} className="text-[7px] text-red-500 mt-2 font-bold uppercase hover:underline">Esquecer</button>}
                   </div>
                 ))}
               </div>
