@@ -598,13 +598,14 @@ const App: React.FC = () => {
               {showItemForm && (
                 <form onSubmit={handleAddItem} className="mb-8 p-6 bg-slate-900/50 rounded-xl border border-amber-500/20 space-y-4 animate-in slide-in-from-top-4">
                   <div className="grid grid-cols-2 gap-4">
-                    <input name="name" placeholder="Nome do Objeto" required className="bg-slate-800 p-2 rounded text-xs border border-slate-700" />
-                    <select name="type" className="bg-slate-800 p-2 rounded text-xs border border-slate-700"><option value="weapon">Arma</option><option value="armor">Armadura</option><option value="utility">Utilitário</option></select>
+                    <input name="name" placeholder="Nome do Objeto" required className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
+                    <select name="type" className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500"><option value="weapon">Arma</option><option value="armor">Armadura</option><option value="utility">Utilitário</option></select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <input name="damage" placeholder="Dano (ex: 1d8+2)" className="bg-slate-800 p-2 rounded text-xs border border-slate-700" />
-                    <input name="defense" type="number" placeholder="Defesa" className="bg-slate-800 p-2 rounded text-xs border border-slate-700" />
+                    <input name="damage" placeholder="Dano (ex: 1d8+2)" className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
+                    <input name="defense" type="number" placeholder="Defesa" className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
                   </div>
+                  <textarea name="description" placeholder="Descrição do item..." className="w-full bg-slate-800 p-2 rounded text-xs h-20 border border-slate-700 outline-none focus:border-amber-500" />
                   <button type="submit" className="w-full bg-green-600 py-2 rounded font-bold text-xs hover:bg-green-500 transition-colors uppercase">Forjar Item</button>
                 </form>
               )}
@@ -618,8 +619,9 @@ const App: React.FC = () => {
                         <button onClick={() => { const n = activeChar.inventory.map(i => i.id === item.id ? { ...i, isEquipped: !i.isEquipped } : i); updateActiveChar({ ...activeChar, inventory: n }); }} className={`text-[8px] font-bold px-2 py-1 rounded transition-colors ${item.isEquipped ? 'bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'}`}>{item.isEquipped ? 'EQUIPADO' : 'EQUIPAR'}</button>
                       </div>
                     </div>
-                    {item.defense ? <div className="text-[9px] text-green-400 font-bold">🛡️ Defesa +{item.defense}</div> : null}
-                    {isEditing && <button onClick={() => { const n = activeChar.inventory.filter(i => i.id !== item.id); updateActiveChar({...activeChar, inventory: n}); }} className="mt-4 text-[8px] text-red-500 self-end font-bold uppercase hover:underline">Descartar</button>}
+                    {item.defense ? <div className="text-[9px] text-green-400 font-bold mb-1">🛡️ Defesa +{item.defense}</div> : null}
+                    {item.description && <p className="text-[10px] text-slate-400 italic mt-1 leading-tight border-l-2 border-slate-600/30 pl-2 mb-2 line-clamp-3 group-hover:line-clamp-none transition-all">{item.description}</p>}
+                    {isEditing && <button onClick={() => { const n = activeChar.inventory.filter(i => i.id !== item.id); updateActiveChar({...activeChar, inventory: n}); }} className="mt-auto text-[8px] text-red-500 self-end font-bold uppercase hover:underline pt-2">Descartar</button>}
                   </div>
                 ))}
               </div>
