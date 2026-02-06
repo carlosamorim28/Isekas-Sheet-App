@@ -58,9 +58,10 @@ export const OFFICIAL_SKILL_LIST = [
   { name: "Perícia Mágica (Terra)", attr: "Poder Mágico" },
   { name: "Armas Corpo à Corpo", attr: "Força" },
   { name: "Armas à Distância", attr: "Destreza" },
-  { name: "Escudos", attr: "Força" },
-  { name: "Defesa sem Armadura", attr: "Destreza" },
-  { name: "Armaduras Leves", attr: "Destreza" },
-  { name: "Armaduras Médias", attr: "Força" },
-  { name: "Armaduras Pesadas", attr: "Constituição" }
+  // Perícias de Armadura Desvinculadas de Atributos
+  { name: "Escudos", attr: "---" },
+  { name: "Defesa sem Armadura", attr: "---" },
+  { name: "Armaduras Leves", attr: "---" },
+  { name: "Armaduras Médias", attr: "---" },
+  { name: "Armaduras Pesadas", attr: "---" }
 ];
