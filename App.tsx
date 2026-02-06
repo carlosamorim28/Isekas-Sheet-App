@@ -376,7 +376,28 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <button onClick={() => { const data = JSON.stringify(characters, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'fichas.json'; a.click(); }} className="px-3 py-1.5 rounded bg-slate-800 border border-amber-500/20 text-amber-400 text-[10px] font-bold uppercase hover:bg-slate-700">📤 Exportar</button>
               <button onClick={() => importInputRef.current?.click()} className="px-3 py-1.5 rounded bg-slate-800 border border-amber-500/20 text-amber-400 text-[10px] font-bold uppercase hover:bg-slate-700">📥 Importar</button>
-              <input type="file" ref={importInputRef} onChange={(e) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => { try { const chars = JSON.parse(ev.target?.result as string); setCharacters(chars); setActiveIndex(0); } catch (err) { alert("Erro ao importar."); } }; reader.readAsText(file); } }} className="hidden" accept=".json" />
+              <input type="file" ref={importInputRef} onChange={(e) => { 
+                const file = e.target.files?.[0]; 
+                if (file) { 
+                  const reader = new FileReader(); 
+                  reader.onload = (ev) => { 
+                    try { 
+                      const importedData = JSON.parse(ev.target?.result as string); 
+                      const newOnes = (Array.isArray(importedData) ? importedData : [importedData]).map(c => ({
+                        ...c,
+                        id: crypto.randomUUID() // Garante ID único para evitar bugs de seleção e duplicidade
+                      }));
+                      setCharacters(prev => [...prev, ...newOnes]); 
+                      alert(`${newOnes.length} personagem(ns) adicionado(s) com sucesso!`);
+                    } catch (err) { 
+                      alert("Erro ao importar: formato de arquivo inválido."); 
+                    } 
+                  }; 
+                  reader.readAsText(file); 
+                  // Limpa o input para permitir importar o mesmo arquivo novamente se desejado
+                  e.target.value = '';
+                } 
+              }} className="hidden" accept=".json" />
             </div>
           </div>
         </div>
