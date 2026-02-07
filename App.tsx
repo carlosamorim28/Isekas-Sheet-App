@@ -4,11 +4,11 @@ import { INITIAL_CHARACTER_DATA, RANK_BONUS, RANK_NAMES, OFFICIAL_SKILL_LIST } f
 import { AttributeCard, calculateMod } from './components/AttributeCard';
 import { StatusBar } from './components/StatusBar';
 import { Attribute, Skill, Spell, Ability, Item, ProficiencyRank, ItemType, CharacterData, XpLog } from './types';
+import { notifyDiscordRoll } from './services/discordNotifyService';
 
 const STORAGE_KEY = 'rpg_sheet_characters_v1';
 const INDEX_KEY = 'rpg_sheet_active_index_v1';
 
-// Função auxiliar para criar uma cópia profunda dos dados iniciais
 const createNewCharacterData = (name: string, folder: string): CharacterData => ({
   ...INITIAL_CHARACTER_DATA,
   id: crypto.randomUUID(),
@@ -24,7 +24,6 @@ const createNewCharacterData = (name: string, folder: string): CharacterData => 
   xpLog: []
 });
 
-// Tabelas de Custos de XP Atributos
 const getAttrXPCostForNextPoint = (val: number) => {
   if (val < 20) return 1;
   if (val < 30) return 2;
@@ -46,7 +45,6 @@ const calculateTotalAttrSpent = (val: number) => {
   return total;
 };
 
-// Tabelas de Custos Perícias
 const calculateSkillUpgradeOnly = (rank: ProficiencyRank, isDiscounted: boolean = false) => {
   const costs: Record<ProficiencyRank, number> = {
     'E': 0, 'D': 10, 'C': 10 + 50, 'B': 10 + 50 + 200, 'A': 10 + 50 + 200 + 300, 'S': 10 + 50 + 200 + 300 + 500,
@@ -55,7 +53,6 @@ const calculateSkillUpgradeOnly = (rank: ProficiencyRank, isDiscounted: boolean 
   return isDiscounted ? Math.floor(total * 0.5) : total;
 };
 
-// Tabelas de Custos Magias
 const getEntryCost = (origin: 'learned' | 'created', rank?: ProficiencyRank, isDiscounted: boolean = false) => {
   if (!rank) return 0;
   const table: Record<ProficiencyRank, number> = {
@@ -120,7 +117,6 @@ const App: React.FC = () => {
   const [isSpellInitialDuringCreation, setIsSpellInitialDuringCreation] = useState(false);
   const [selectedInitialRank, setSelectedInitialRank] = useState<ProficiencyRank>('E');
 
-  // Estados para nova perícia personalizada
   const [customSkillName, setCustomSkillName] = useState("");
   const [customSkillAttr, setCustomSkillAttr] = useState("---");
 
@@ -148,7 +144,7 @@ const App: React.FC = () => {
   const availableXp = activeChar.totalXp - xpSpent;
 
   const getAttrMod = (name: string) => {
-    if (!name || name === "---") return 0; // Perícias desvinculadas não somam atributo
+    if (!name || name === "---") return 0;
     const attr = activeChar.attributes.find(a => a.name === name);
     const total = attr ? attr.value + attr.racialBonus : 0;
     return calculateMod(total);
@@ -266,7 +262,12 @@ const App: React.FC = () => {
 
   const handleRoll = (name: string, bonus: number) => {
     const d20 = Math.floor(Math.random() * 20) + 1;
-    setRollResult({ name, roll: d20, bonus, total: d20 + bonus });
+    const total = d20 + bonus;
+    setRollResult({ name, roll: d20, bonus, total });
+    
+    // Notificação Discord
+    notifyDiscordRoll(activeChar.name, name, total, d20, bonus);
+
     setTimeout(() => setRollResult(null), 5000);
   };
 
@@ -284,7 +285,13 @@ const App: React.FC = () => {
         rolls.push(r);
         totalRoll += r;
     }
-    setRollResult({ name: `Dano: ${item.name}`, roll: rolls.join(' + '), bonus: staticBonus, total: totalRoll + staticBonus, isDamage: true });
+    const finalTotal = totalRoll + staticBonus;
+    const rollDisplay = rolls.join(' + ');
+    setRollResult({ name: `Dano: ${item.name}`, roll: rollDisplay, bonus: staticBonus, total: finalTotal, isDamage: true });
+    
+    // Notificação Discord
+    notifyDiscordRoll(activeChar.name, `Dano: ${item.name}`, finalTotal, rollDisplay, staticBonus);
+
     setTimeout(() => setRollResult(null), 5000);
   };
 
@@ -312,7 +319,6 @@ const App: React.FC = () => {
       <nav className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-amber-500/20 px-4 py-3 flex flex-col gap-3 shadow-lg">
         <div className="max-w-6xl mx-auto w-full flex flex-col gap-4">
           
-          {/* Linha das Pastas */}
           <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
             {folders.map(f => {
               const showRename = isEditing && f !== "Geral";
@@ -352,7 +358,6 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between gap-4">
-            {/* Personagens na Pasta Ativa */}
             <div className="flex items-center gap-3 overflow-x-auto">
               {filteredCharacters.length > 0 ? filteredCharacters.map((char) => {
                 const realIdx = characters.findIndex(c => c.id === char.id);
@@ -385,7 +390,7 @@ const App: React.FC = () => {
                       const importedData = JSON.parse(ev.target?.result as string); 
                       const newOnes = (Array.isArray(importedData) ? importedData : [importedData]).map(c => ({
                         ...c,
-                        id: crypto.randomUUID() // Garante ID único para evitar bugs de seleção e duplicidade
+                        id: crypto.randomUUID()
                       }));
                       setCharacters(prev => [...prev, ...newOnes]); 
                       alert(`${newOnes.length} personagem(ns) adicionado(s) com sucesso!`);
@@ -394,7 +399,6 @@ const App: React.FC = () => {
                     } 
                   }; 
                   reader.readAsText(file); 
-                  // Limpa o input para permitir importar o mesmo arquivo novamente se desejado
                   e.target.value = '';
                 } 
               }} className="hidden" accept=".json" />
@@ -463,7 +467,6 @@ const App: React.FC = () => {
 
         <main className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
-            {/* ATRIBUTOS */}
             <section>
               <h2 className="text-xl font-medieval text-amber-200 mb-4 flex items-center gap-2">𖤍 Atributos Rúnicos</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -511,7 +514,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* PERÍCIAS */}
             <section className="glass-panel p-6 rounded-2xl">
               <div className="flex justify-between items-center mb-6 border-b border-amber-500/10 pb-2">
                 <h2 className="text-xl font-medieval text-amber-200">⚜ Perícias</h2>
@@ -531,42 +533,21 @@ const App: React.FC = () => {
                       {(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <button key={r} onClick={() => setSelectedInitialRank(r)} className={`px-3 py-1.5 rounded text-[9px] font-bold border transition-all ${selectedInitialRank === r ? 'bg-amber-600 border-amber-400' : 'bg-slate-800 border-slate-700'}`}>{r} - {RANK_NAMES[r]}</button>)}
                     </div>
                   </div>
-
                   <div className="space-y-4">
                     <div className="text-[10px] text-amber-500 uppercase font-bold tracking-widest border-l-2 border-amber-500 pl-2">Perícias Oficiais</div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {OFFICIAL_SKILL_LIST.map(skill => <button key={skill.name} onClick={() => handleSelectSkill(skill)} className="text-[10px] p-2 bg-slate-800 hover:bg-amber-600/20 text-left rounded border border-slate-700 transition-colors group"><div>{skill.name}</div><div className="text-[7px] text-slate-500 group-hover:text-amber-500/60">{skill.attr === "---" ? "Geral/Equipamento" : skill.attr}</div></button>)}
                     </div>
                   </div>
-
                   <div className="space-y-4 pt-4 border-t border-amber-500/10">
                     <div className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest border-l-2 border-indigo-500 pl-2">Perícia Personalizada</div>
                     <div className="flex flex-col sm:flex-row gap-2">
-                      <input 
-                        type="text" 
-                        placeholder="Nome da Nova Perícia" 
-                        className="flex-1 bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors"
-                        value={customSkillName}
-                        onChange={e => setCustomSkillName(e.target.value)}
-                      />
-                      <select 
-                        className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]"
-                        value={customSkillAttr}
-                        onChange={e => setCustomSkillAttr(e.target.value)}
-                      >
+                      <input type="text" placeholder="Nome da Nova Perícia" className="flex-1 bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors" value={customSkillName} onChange={e => setCustomSkillName(e.target.value)} />
+                      <select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr} onChange={e => setCustomSkillAttr(e.target.value)}>
                         {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
                         <option value="---">--- (Geral/Equipamento)</option>
                       </select>
-                      <button 
-                        onClick={() => {
-                          if (!customSkillName.trim()) return;
-                          handleSelectSkill({ name: customSkillName, attr: customSkillAttr });
-                          setCustomSkillName("");
-                        }}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-6 py-2 rounded font-bold transition-all active:scale-95"
-                      >
-                        CRIAR
-                      </button>
+                      <button onClick={() => { if (!customSkillName.trim()) return; handleSelectSkill({ name: customSkillName, attr: customSkillAttr }); setCustomSkillName(""); }} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-6 py-2 rounded font-bold transition-all active:scale-95">CRIAR</button>
                     </div>
                   </div>
                 </div>
@@ -576,9 +557,7 @@ const App: React.FC = () => {
                   <div key={idx} className="flex flex-col p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <span className="text-[7px] uppercase font-bold text-slate-500">
-                          {skill.relatedAttribute === "---" ? "Equipamento" : skill.relatedAttribute}
-                        </span>
+                        <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute === "---" ? "Equipamento" : skill.relatedAttribute}</span>
                         <h4 className="text-slate-100 font-bold text-sm">{skill.name}</h4>
                       </div>
                       <div className="text-xs font-bold text-amber-500">+{RANK_BONUS[skill.rank] + getAttrMod(skill.relatedAttribute)}</div>
@@ -601,7 +580,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* HABILIDADES */}
             <section className="glass-panel p-6 rounded-2xl border-amber-500/10">
               <div className="flex justify-between items-center mb-6 border-b border-amber-500/10 pb-2">
                 <h2 className="text-xl font-medieval text-amber-200">⚔️ Habilidades</h2>
@@ -625,7 +603,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* INVENTÁRIO */}
             <section className="glass-panel p-6 rounded-2xl border-amber-500/10">
               <div className="flex justify-between items-center mb-6 border-b border-amber-500/10 pb-2">
                 <h2 className="text-xl font-medieval text-amber-200">🗡️ Inventário</h2>
@@ -665,7 +642,6 @@ const App: React.FC = () => {
           </div>
 
           <div className="lg:col-span-4 space-y-8">
-            {/* STATUS */}
             <section className="glass-panel p-6 rounded-2xl border-t-4 border-red-900/40">
               <h2 className="text-xl font-medieval text-amber-200 mb-6">❖ Status</h2>
               <StatusBar label="Vida" current={activeChar.hp.current} max={hpMax} color="bg-red-600" icon="❤️" onUpdate={v => updateActiveChar({...activeChar, hp: {...activeChar.hp, current: v}})} isEditing={isEditing} onMaxUpdate={v => updateActiveChar({...activeChar, hp: {...activeChar.hp, extraMax: v - 20 - (5 * getAttrMod('Constituição'))}})} />
@@ -683,7 +659,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* HISTÓRICO */}
             <section className="glass-panel p-6 rounded-2xl border-amber-500/10 flex flex-col h-[400px]">
               <h2 className="text-xl font-medieval text-amber-200 mb-4 border-b border-amber-500/10 pb-2">📜 Histórico XP</h2>
               <div className="overflow-y-auto pr-2 space-y-3 flex-1 custom-scrollbar">
@@ -699,7 +674,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* GRIMÓRIO */}
             <section className="glass-panel p-6 rounded-2xl border-indigo-500/10">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-medieval text-indigo-300">۞ Grimório</h2>
