@@ -37,8 +37,13 @@ export interface Spell {
   isDiscounted?: boolean;
   damage?: string;
   damageBonus?: number;
-  relatedAttr1?: string;
+  relatedAttr1?: string; // Vínculos de Dano
   relatedAttr2?: string;
+  // Campos de Acerto
+  attackBonus?: number;
+  attackSkillName?: string;
+  attackAttr1?: string;
+  attackAttr2?: string;
 }
 
 export interface Ability {

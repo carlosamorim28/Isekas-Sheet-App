@@ -109,6 +109,7 @@ const App: React.FC = () => {
   const [showSkillSelect, setShowSkillSelect] = useState(false);
   const [editingSkillIndex, setEditingSkillIndex] = useState<number | null>(null);
   const [showSpellForm, setShowSpellForm] = useState(false);
+  const [editingSpellIndex, setEditingSpellIndex] = useState<number | null>(null);
   const [showAbilityForm, setShowAbilityForm] = useState(false);
   
   // Estado para formulário de Itens
@@ -125,6 +126,23 @@ const App: React.FC = () => {
     relatedSkillName: "",
     relatedAttr1: "",
     relatedAttr2: ""
+  });
+
+  // Estado para formulário de Magias (Controlado para edição)
+  const [spellFormValues, setSpellFormValues] = useState({
+    name: "",
+    rank: 'E' as ProficiencyRank,
+    cost: "",
+    description: "",
+    origin: 'learned' as 'learned' | 'created',
+    damage: "",
+    damageBonus: 0,
+    relatedAttr1: "",
+    relatedAttr2: "",
+    attackBonus: 0,
+    attackSkillName: "",
+    attackAttr1: "",
+    attackAttr2: ""
   });
   
   const [isSkillDiscounted, setIsSkillDiscounted] = useState(false);
@@ -260,29 +278,73 @@ const App: React.FC = () => {
     setShowSkillSelect(true);
   };
 
-  const handleAddSpell = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveSpell = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const rank = formData.get('rank') as ProficiencyRank;
-    const origin = formData.get('origin') as 'learned' | 'created';
+    const rank = spellFormValues.rank;
+    const origin = spellFormValues.origin;
+    
     const initialRank = isSpellInitialDuringCreation ? rank : undefined;
     const cost = getEntryCost(origin, rank, isSpellDiscounted) - (initialRank ? getEntryCost(origin, initialRank, isSpellDiscounted) : 0);
+    
     const newSpell: Spell = { 
-      name: formData.get('name') as string, 
+      name: spellFormValues.name, 
       rank, 
       initialRank, 
-      cost: formData.get('cost') as string, 
-      description: formData.get('description') as string, 
+      cost: spellFormValues.cost, 
+      description: spellFormValues.description, 
       origin, 
       isDiscounted: isSpellDiscounted,
-      damage: formData.get('damage') as string || undefined,
-      damageBonus: parseInt(formData.get('damageBonus') as string) || 0,
-      relatedAttr1: formData.get('relatedAttr1') as string || undefined,
-      relatedAttr2: formData.get('relatedAttr2') as string || undefined
+      damage: spellFormValues.damage || undefined,
+      damageBonus: spellFormValues.damageBonus,
+      relatedAttr1: spellFormValues.relatedAttr1 || undefined,
+      relatedAttr2: spellFormValues.relatedAttr2 || undefined,
+      attackBonus: spellFormValues.attackBonus,
+      attackSkillName: spellFormValues.attackSkillName || undefined,
+      attackAttr1: spellFormValues.attackAttr1 || undefined,
+      attackAttr2: spellFormValues.attackAttr2 || undefined
     };
-    const newLogs = cost > 0 ? [{ id: crypto.randomUUID(), timestamp: Date.now(), description: `Aprendizado Magia (${origin === 'created' ? 'Criada' : 'Lida'}): ${newSpell.name} (Rank ${rank})`, cost }, ...(activeChar.xpLog || [])] : (activeChar.xpLog || []);
-    updateActiveChar({ ...activeChar, spells: [...activeChar.spells, newSpell], xpLog: newLogs });
+
+    let newSpells = [...activeChar.spells];
+    let newLogs = [...(activeChar.xpLog || [])];
+
+    if (editingSpellIndex !== null) {
+      newSpells[editingSpellIndex] = newSpell;
+    } else {
+      newSpells.push(newSpell);
+      if (cost > 0) {
+        newLogs = [{ id: crypto.randomUUID(), timestamp: Date.now(), description: `Aprendizado Magia (${origin === 'created' ? 'Criada' : 'Lida'}): ${newSpell.name} (Rank ${rank})`, cost }, ...newLogs];
+      }
+    }
+
+    updateActiveChar({ ...activeChar, spells: newSpells, xpLog: newLogs });
     setShowSpellForm(false);
+    setEditingSpellIndex(null);
+    setSpellFormValues({
+      name: "", rank: 'E', cost: "", description: "", origin: 'learned', damage: "", damageBonus: 0, relatedAttr1: "", relatedAttr2: "",
+      attackBonus: 0, attackSkillName: "", attackAttr1: "", attackAttr2: ""
+    });
+  };
+
+  const handleEditSpellStart = (idx: number) => {
+    const spell = activeChar.spells[idx];
+    setEditingSpellIndex(idx);
+    setSpellFormValues({
+      name: spell.name,
+      rank: spell.rank,
+      cost: spell.cost,
+      description: spell.description,
+      origin: spell.origin,
+      damage: spell.damage || "",
+      damageBonus: spell.damageBonus || 0,
+      relatedAttr1: spell.relatedAttr1 || "",
+      relatedAttr2: spell.relatedAttr2 || "",
+      attackBonus: spell.attackBonus || 0,
+      attackSkillName: spell.attackSkillName || "",
+      attackAttr1: spell.attackAttr1 || "",
+      attackAttr2: spell.attackAttr2 || ""
+    });
+    setIsSpellDiscounted(!!spell.isDiscounted);
+    setShowSpellForm(true);
   };
 
   const handleRemoveSpell = (idx: number) => {
@@ -375,6 +437,23 @@ const App: React.FC = () => {
       }
     }
     handleRoll(`Ataque: ${item.name}`, bonus);
+  };
+
+  const handleSpellAttackRoll = (spell: Spell) => {
+    let bonus = spell.attackBonus || 0;
+    if (spell.attackSkillName) {
+      const skill = activeChar.skills.find(s => s.name === spell.attackSkillName);
+      if (skill) {
+        const b1 = getAttrMod(skill.relatedAttribute);
+        const b2 = skill.relatedAttribute2 ? getAttrMod(skill.relatedAttribute2) : 0;
+        bonus += RANK_BONUS[skill.rank] + b1 + b2;
+      }
+    } else {
+      // Se não tem perícia vinculada, tenta usar atributos diretos se definidos
+      if (spell.attackAttr1) bonus += getAttrMod(spell.attackAttr1);
+      if (spell.attackAttr2) bonus += getAttrMod(spell.attackAttr2);
+    }
+    handleRoll(`Acerto (Magia): ${spell.name}`, bonus);
   };
 
   const handleDamageRollLogic = (name: string, damageStr: string, staticBonus: number, attr1?: string, attr2?: string) => {
@@ -805,66 +884,141 @@ const App: React.FC = () => {
                 {isEditing && (
                   <div className="flex gap-2">
                     <button onClick={() => setIsSpellDiscounted(!isSpellDiscounted)} className={`text-[8px] px-2 py-1 rounded font-bold border transition-colors ${isSpellDiscounted ? 'bg-indigo-600 border-indigo-400' : 'bg-slate-800 border-slate-700'}`}>50% OFF</button>
-                    <button onClick={() => setShowSpellForm(!showSpellForm)} className="text-[10px] px-2 py-1 bg-indigo-600 rounded font-bold transition-transform active:scale-95">+ NOVA</button>
+                    <button onClick={() => { setEditingSpellIndex(null); setSpellFormValues({ name: "", rank: 'E', cost: "", description: "", origin: 'learned', damage: "", damageBonus: 0, relatedAttr1: "", relatedAttr2: "", attackBonus: 0, attackSkillName: "", attackAttr1: "", attackAttr2: "" }); setShowSpellForm(!showSpellForm); }} className="text-[10px] px-2 py-1 bg-indigo-600 rounded font-bold transition-transform active:scale-95">{showSpellForm ? 'FECHAR' : '+ NOVA'}</button>
                   </div>
                 )}
               </div>
               {showSpellForm && (
-                <form onSubmit={handleAddSpell} className="mb-4 p-4 bg-indigo-950/20 rounded-xl border border-indigo-500/20 space-y-3 animate-in fade-in slide-in-from-top-4">
-                   <input name="name" placeholder="Nome da Magia" required className="w-full bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
-                   <div className="grid grid-cols-2 gap-2">
-                     <input name="cost" placeholder="Custo PM" required className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
-                     <select name="rank" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">{(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <option key={r} value={r}>{r} - {RANK_NAMES[r]}</option>)}</select>
+                <form onSubmit={handleSaveSpell} className="mb-4 p-4 bg-indigo-950/20 rounded-xl border border-indigo-500/20 space-y-3 animate-in fade-in slide-in-from-top-4">
+                   <div className="text-[10px] font-bold text-indigo-400 uppercase mb-2 border-b border-indigo-500/20 pb-1">
+                     {editingSpellIndex !== null ? 'Editar Magia' : 'Nova Magia'}
                    </div>
+                   <input value={spellFormValues.name} onChange={e => setSpellFormValues({...spellFormValues, name: e.target.value})} placeholder="Nome da Magia" required className="w-full bg-slate-800 p-2 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500" />
                    
                    <div className="grid grid-cols-2 gap-2">
-                      <input name="damage" placeholder="Dano (Ex: 2d6)" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
-                      <input name="damageBonus" type="number" placeholder="Bônus Fixo" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
+                     <div className="flex flex-col">
+                       <label className="text-[7px] text-indigo-400 uppercase mb-1">Custo PM</label>
+                       <input value={spellFormValues.cost} onChange={e => setSpellFormValues({...spellFormValues, cost: e.target.value})} placeholder="Ex: 10 PM" required className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500" />
+                     </div>
+                     <div className="flex flex-col">
+                       <label className="text-[7px] text-indigo-400 uppercase mb-1">Rank</label>
+                       <select value={spellFormValues.rank} onChange={e => setSpellFormValues({...spellFormValues, rank: e.target.value as ProficiencyRank})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500">{(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <option key={r} value={r}>{r} - {RANK_NAMES[r]}</option>)}</select>
+                     </div>
                    </div>
 
-                   <div className="grid grid-cols-2 gap-2">
-                      <select name="relatedAttr1" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
-                        <option value="">Vínculo Attr 1</option>
-                        {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
-                      </select>
-                      <select name="relatedAttr2" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
-                        <option value="">Vínculo Attr 2</option>
-                        {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
-                      </select>
+                   <div className="space-y-2 p-2 bg-indigo-950/40 rounded border border-indigo-500/10">
+                     <div className="text-[8px] font-bold text-indigo-400 uppercase">Acerto (Hit)</div>
+                     <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 uppercase">Bônus Acerto</label>
+                          <input value={spellFormValues.attackBonus} type="number" onChange={e => setSpellFormValues({...spellFormValues, attackBonus: parseInt(e.target.value) || 0})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 uppercase">Perícia de Acerto</label>
+                          <select value={spellFormValues.attackSkillName} onChange={e => setSpellFormValues({...spellFormValues, attackSkillName: e.target.value})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
+                            <option value="">Nenhuma</option>
+                            {activeChar.skills.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                          </select>
+                        </div>
+                     </div>
+                     {!spellFormValues.attackSkillName && (
+                       <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col">
+                            <label className="text-[7px] text-slate-500 uppercase">Attr 1 (Se s/ Perícia)</label>
+                            <select value={spellFormValues.attackAttr1} onChange={e => setSpellFormValues({...spellFormValues, attackAttr1: e.target.value})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
+                              <option value="">Nenhum</option>
+                              {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                            </select>
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-[7px] text-slate-500 uppercase">Attr 2 (Se s/ Perícia)</label>
+                            <select value={spellFormValues.attackAttr2} onChange={e => setSpellFormValues({...spellFormValues, attackAttr2: e.target.value})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
+                              <option value="">Nenhum</option>
+                              {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                            </select>
+                          </div>
+                       </div>
+                     )}
+                   </div>
+                   
+                   <div className="space-y-2 p-2 bg-red-950/20 rounded border border-red-500/10">
+                     <div className="text-[8px] font-bold text-red-400 uppercase">Dano (Damage)</div>
+                     <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 uppercase">Dano (Ex: 2d6)</label>
+                          <input value={spellFormValues.damage} onChange={e => setSpellFormValues({...spellFormValues, damage: e.target.value})} placeholder="2d6" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 uppercase">Bônus Dano Fixo</label>
+                          <input value={spellFormValues.damageBonus} type="number" onChange={e => setSpellFormValues({...spellFormValues, damageBonus: parseInt(e.target.value) || 0})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 uppercase">Dano: Attr 1</label>
+                          <select value={spellFormValues.relatedAttr1} onChange={e => setSpellFormValues({...spellFormValues, relatedAttr1: e.target.value})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
+                            <option value="">Nenhum</option>
+                            {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 uppercase">Dano: Attr 2</label>
+                          <select value={spellFormValues.relatedAttr2} onChange={e => setSpellFormValues({...spellFormValues, relatedAttr2: e.target.value})} className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
+                            <option value="">Nenhum</option>
+                            {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                          </select>
+                        </div>
+                     </div>
                    </div>
 
-                   <select name="origin" className="w-full bg-slate-800 p-2 rounded text-[10px] border border-slate-700"><option value="learned">Aprendida (Normal)</option><option value="created">Criada (Custo x2)</option></select>
-                   <textarea name="description" placeholder="Descrição da Magia..." required className="w-full bg-slate-800 p-2 rounded text-[10px] h-16 border border-slate-700" />
+                   <select value={spellFormValues.origin} onChange={e => setSpellFormValues({...spellFormValues, origin: e.target.value as 'learned' | 'created'})} className="w-full bg-slate-800 p-2 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500"><option value="learned">Aprendida (Normal)</option><option value="created">Criada (Custo x2)</option></select>
+                   <textarea value={spellFormValues.description} onChange={e => setSpellFormValues({...spellFormValues, description: e.target.value})} placeholder="Descrição da Magia..." required className="w-full bg-slate-800 p-2 rounded text-[10px] h-16 border border-slate-700 outline-none focus:border-indigo-500" />
                    <div className="flex items-center gap-2"><input type="checkbox" checked={isSpellInitialDuringCreation} onChange={e => setIsSpellInitialDuringCreation(e.target.checked)} className="rounded text-indigo-600" /><label className="text-[10px] text-indigo-300">Incial (Grátis)?</label></div>
-                   <button type="submit" className="w-full bg-indigo-600 py-1.5 rounded font-bold text-[10px] hover:bg-indigo-500">ADICIONAR</button>
+                   <button type="submit" className="w-full bg-indigo-600 py-1.5 rounded font-bold text-[10px] hover:bg-indigo-500 uppercase">{editingSpellIndex !== null ? 'Salvar Alterações' : 'Adicionar Magia'}</button>
                 </form>
               )}
               <div className="space-y-3">
-                {activeChar.spells.map((spell, idx) => (
-                  <div key={idx} className={`bg-indigo-950/20 p-3 rounded-xl border transition-all ${spell.initialRank ? 'border-green-500/30' : 'border-indigo-500/10'} hover:border-indigo-400/30`}>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="text-indigo-300 font-bold text-xs">{spell.name} {spell.isDiscounted ? '(Desc.)' : ''}</h4>
-                        <span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span>
+                {activeChar.spells.map((spell, idx) => {
+                  const hasAttackParams = spell.attackBonus || spell.attackSkillName || spell.attackAttr1;
+                  return (
+                    <div key={idx} className={`bg-indigo-950/20 p-3 rounded-xl border transition-all ${spell.initialRank ? 'border-green-500/30' : 'border-indigo-500/10'} hover:border-indigo-400/30`}>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="text-indigo-300 font-bold text-xs">{spell.name} {spell.isDiscounted ? '(Desc.)' : ''}</h4>
+                          <span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <span className="text-[8px] bg-indigo-900/40 px-2 py-1 rounded font-bold border border-indigo-700/50">RK {spell.rank}</span>
+                        </div>
                       </div>
-                      <div className="flex gap-2 items-center">
-                        <span className="text-[8px] bg-indigo-900/40 px-2 py-1 rounded font-bold border border-indigo-700/50">RK {spell.rank}</span>
+
+                      <div className="flex gap-2 my-2">
+                        {hasAttackParams && (
+                          <button onClick={() => handleSpellAttackRoll(spell)} className="flex-1 bg-amber-900/40 hover:bg-amber-800/60 border border-amber-700/50 text-[10px] py-1 rounded font-bold text-amber-200">ACERTO</button>
+                        )}
                         {spell.damage && (
-                          <button onClick={() => handleSpellDamageRoll(spell)} className="text-[8px] bg-red-900/60 px-2 py-1 rounded font-bold border border-red-700/50 text-red-200 hover:bg-red-800">DANO</button>
+                          <button onClick={() => handleSpellDamageRoll(spell)} className="flex-1 bg-red-900/40 hover:bg-red-800/60 border border-red-700/50 text-[10px] py-1 rounded font-bold text-red-200">DANO</button>
                         )}
                       </div>
+
+                      {spell.damage && (
+                        <div className="text-[8px] text-red-400 font-bold mb-1 uppercase">
+                            💥 {spell.damage} {spell.damageBonus ? `+ ${spell.damageBonus}` : ''} 
+                            {spell.relatedAttr1 && ` + ${spell.relatedAttr1.substring(0,3)}`}
+                            {spell.relatedAttr2 && ` + ${spell.relatedAttr2.substring(0,3)}`}
+                        </div>
+                      )}
+                      {spell.description && <p className="text-[9px] text-slate-400 mt-1 italic leading-tight border-l-2 border-indigo-500/20 pl-2 whitespace-pre-wrap line-clamp-2 hover:line-clamp-none transition-all">"{spell.description}"</p>}
+                      {isEditing && (
+                        <div className="mt-2 pt-2 border-t border-indigo-500/10 flex justify-between">
+                          <button onClick={() => handleEditSpellStart(idx)} className="text-[7px] text-amber-500 font-bold uppercase hover:underline">Editar</button>
+                          <button onClick={() => handleRemoveSpell(idx)} className="text-[7px] text-red-500 font-bold uppercase hover:underline">Esquecer</button>
+                        </div>
+                      )}
                     </div>
-                    {spell.damage && (
-                       <div className="text-[8px] text-red-400 font-bold mt-1 uppercase">
-                          💥 {spell.damage} {spell.damageBonus ? `+ ${spell.damageBonus}` : ''} 
-                          {spell.relatedAttr1 && ` + ${spell.relatedAttr1.substring(0,3)}`}
-                          {spell.relatedAttr2 && ` + ${spell.relatedAttr2.substring(0,3)}`}
-                       </div>
-                    )}
-                    {spell.description && <p className="text-[9px] text-slate-400 mt-1 italic leading-tight border-l-2 border-indigo-500/20 pl-2 whitespace-pre-wrap">"{spell.description}"</p>}
-                    {isEditing && <button onClick={() => handleRemoveSpell(idx)} className="text-[7px] text-red-500 mt-2 font-bold uppercase hover:underline">Esquecer</button>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           </div>
