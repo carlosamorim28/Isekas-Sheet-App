@@ -22,6 +22,7 @@ export interface Skill {
   rank: ProficiencyRank;
   initialRank?: ProficiencyRank; // Se definido, o custo até este rank é 0
   relatedAttribute: string;
+  relatedAttribute2?: string; // Segundo atributo opcional
   initialBonus: number;
   isDiscounted?: boolean;
 }

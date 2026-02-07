@@ -107,6 +107,7 @@ const App: React.FC = () => {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const [showSkillSelect, setShowSkillSelect] = useState(false);
+  const [editingSkillIndex, setEditingSkillIndex] = useState<number | null>(null);
   const [showSpellForm, setShowSpellForm] = useState(false);
   const [showAbilityForm, setShowAbilityForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
@@ -119,6 +120,7 @@ const App: React.FC = () => {
 
   const [customSkillName, setCustomSkillName] = useState("");
   const [customSkillAttr, setCustomSkillAttr] = useState("---");
+  const [customSkillAttr2, setCustomSkillAttr2] = useState("---");
 
   const updateActiveChar = (updated: CharacterData) => {
     const newChars = [...characters];
@@ -201,14 +203,48 @@ const App: React.FC = () => {
     updateActiveChar({ ...activeChar, skills: newSkills, xpLog: newLogs });
   };
 
-  const handleSelectSkill = (skill: { name: string; attr: string }) => {
+  const handleSelectSkill = (skill: { name: string; attr: string; attr2?: string }) => {
     if (!skill.name.trim()) return;
+    
+    if (editingSkillIndex !== null) {
+      // Estamos editando uma perícia existente
+      const newSkills = [...activeChar.skills];
+      newSkills[editingSkillIndex] = {
+        ...newSkills[editingSkillIndex],
+        name: skill.name,
+        relatedAttribute: skill.attr,
+        relatedAttribute2: skill.attr2 === "---" ? undefined : skill.attr2
+      };
+      updateActiveChar({ ...activeChar, skills: newSkills });
+      setEditingSkillIndex(null);
+      setShowSkillSelect(false);
+      return;
+    }
+
+    // Criando nova perícia
     const initialRank = isSkillInitialDuringCreation ? selectedInitialRank : undefined;
     const cost = calculateSkillUpgradeOnly(selectedInitialRank, isSkillDiscounted) - (initialRank ? calculateSkillUpgradeOnly(initialRank, isSkillDiscounted) : 0);
-    const newSkill: Skill = { name: skill.name, rank: selectedInitialRank, initialRank, relatedAttribute: skill.attr, initialBonus: 0, isDiscounted: isSkillDiscounted };
+    const newSkill: Skill = { 
+      name: skill.name, 
+      rank: selectedInitialRank, 
+      initialRank, 
+      relatedAttribute: skill.attr, 
+      relatedAttribute2: skill.attr2 === "---" ? undefined : skill.attr2,
+      initialBonus: 0, 
+      isDiscounted: isSkillDiscounted 
+    };
     const newLogs = cost > 0 ? [{ id: crypto.randomUUID(), timestamp: Date.now(), description: `Aquisição Perícia: ${skill.name} (Rank ${selectedInitialRank})`, cost }, ...(activeChar.xpLog || [])] : (activeChar.xpLog || []);
     updateActiveChar({ ...activeChar, skills: [...activeChar.skills, newSkill], xpLog: newLogs });
     setShowSkillSelect(false);
+  };
+
+  const handleEditSkillStart = (idx: number) => {
+    const skill = activeChar.skills[idx];
+    setEditingSkillIndex(idx);
+    setCustomSkillName(skill.name);
+    setCustomSkillAttr(skill.relatedAttribute);
+    setCustomSkillAttr2(skill.relatedAttribute2 || "---");
+    setShowSkillSelect(true);
   };
 
   const handleAddSpell = (e: React.FormEvent<HTMLFormElement>) => {
@@ -521,62 +557,113 @@ const App: React.FC = () => {
                   <div className="flex gap-2">
                     <button onClick={() => setIsSkillDiscounted(!isSkillDiscounted)} className={`text-[8px] px-2 py-1 rounded font-bold border transition-colors ${isSkillDiscounted ? 'bg-indigo-600 border-indigo-400' : 'bg-slate-800 border-slate-700'}`}>50% OFF</button>
                     <button onClick={() => setIsSkillInitialDuringCreation(!isSkillInitialDuringCreation)} className={`text-[8px] px-2 py-1 rounded font-bold border transition-colors ${isSkillInitialDuringCreation ? 'bg-green-600 border-green-400' : 'bg-slate-800 border-slate-700'}`}>INICIAL</button>
-                    <button onClick={() => setShowSkillSelect(!showSkillSelect)} className="bg-amber-600 text-[10px] px-3 py-1 rounded font-bold transition-transform active:scale-95">+ ADICIONAR</button>
+                    <button onClick={() => { 
+                      setEditingSkillIndex(null); 
+                      setCustomSkillName(""); 
+                      setCustomSkillAttr("---"); 
+                      setCustomSkillAttr2("---"); 
+                      setShowSkillSelect(!showSkillSelect); 
+                    }} className="bg-amber-600 text-[10px] px-3 py-1 rounded font-bold transition-transform active:scale-95">
+                      {showSkillSelect ? 'FECHAR' : '+ ADICIONAR'}
+                    </button>
                   </div>
                 )}
               </div>
               {showSkillSelect && isEditing && (
                 <div className="mb-6 p-4 bg-slate-900/80 rounded-xl border border-amber-500/20 space-y-6 animate-in fade-in zoom-in-95">
-                  <div className="space-y-4">
-                    <div className="text-[10px] text-amber-500 uppercase font-bold tracking-widest border-l-2 border-amber-500 pl-2">Escolher Rank Inicial</div>
-                    <div className="flex flex-wrap gap-2">
-                      {(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <button key={r} onClick={() => setSelectedInitialRank(r)} className={`px-3 py-1.5 rounded text-[9px] font-bold border transition-all ${selectedInitialRank === r ? 'bg-amber-600 border-amber-400' : 'bg-slate-800 border-slate-700'}`}>{r} - {RANK_NAMES[r]}</button>)}
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="text-[10px] text-amber-500 uppercase font-bold tracking-widest border-l-2 border-amber-500 pl-2">Perícias Oficiais</div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {OFFICIAL_SKILL_LIST.map(skill => <button key={skill.name} onClick={() => handleSelectSkill(skill)} className="text-[10px] p-2 bg-slate-800 hover:bg-amber-600/20 text-left rounded border border-slate-700 transition-colors group"><div>{skill.name}</div><div className="text-[7px] text-slate-500 group-hover:text-amber-500/60">{skill.attr === "---" ? "Geral/Equipamento" : skill.attr}</div></button>)}
-                    </div>
-                  </div>
+                  {editingSkillIndex === null && (
+                    <>
+                      <div className="space-y-4">
+                        <div className="text-[10px] text-amber-500 uppercase font-bold tracking-widest border-l-2 border-amber-500 pl-2">Escolher Rank Inicial</div>
+                        <div className="flex flex-wrap gap-2">
+                          {(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <button key={r} onClick={() => setSelectedInitialRank(r)} className={`px-3 py-1.5 rounded text-[9px] font-bold border transition-all ${selectedInitialRank === r ? 'bg-amber-600 border-amber-400' : 'bg-slate-800 border-slate-700'}`}>{r} - {RANK_NAMES[r]}</button>)}
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="text-[10px] text-amber-500 uppercase font-bold tracking-widest border-l-2 border-amber-500 pl-2">Perícias Oficiais</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {OFFICIAL_SKILL_LIST.map(skill => <button key={skill.name} onClick={() => handleSelectSkill(skill)} className="text-[10px] p-2 bg-slate-800 hover:bg-amber-600/20 text-left rounded border border-slate-700 transition-colors group"><div>{skill.name}</div><div className="text-[7px] text-slate-500 group-hover:text-amber-500/60">{skill.attr === "---" ? "Geral/Equipamento" : skill.attr}</div></button>)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  
                   <div className="space-y-4 pt-4 border-t border-amber-500/10">
-                    <div className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest border-l-2 border-indigo-500 pl-2">Perícia Personalizada</div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input type="text" placeholder="Nome da Nova Perícia" className="flex-1 bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors" value={customSkillName} onChange={e => setCustomSkillName(e.target.value)} />
-                      <select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr} onChange={e => setCustomSkillAttr(e.target.value)}>
-                        {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
-                        <option value="---">--- (Geral/Equipamento)</option>
-                      </select>
-                      <button onClick={() => { if (!customSkillName.trim()) return; handleSelectSkill({ name: customSkillName, attr: customSkillAttr }); setCustomSkillName(""); }} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-6 py-2 rounded font-bold transition-all active:scale-95">CRIAR</button>
+                    <div className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest border-l-2 border-indigo-500 pl-2">
+                      {editingSkillIndex !== null ? 'Editando Perícia' : 'Perícia Personalizada'}
+                    </div>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input type="text" placeholder="Nome da Perícia" className="flex-1 bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors" value={customSkillName} onChange={e => setCustomSkillName(e.target.value)} />
+                        <div className="flex gap-2">
+                          <div className="flex flex-col">
+                            <span className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Primário</span>
+                            <select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr} onChange={e => setCustomSkillAttr(e.target.value)}>
+                              {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                              <option value="---">--- (Geral)</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Secundário (Opcional)</span>
+                            <select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr2} onChange={e => setCustomSkillAttr2(e.target.value)}>
+                              <option value="---">--- Nenhum ---</option>
+                              {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 self-end">
+                        {editingSkillIndex !== null && (
+                          <button onClick={() => { setEditingSkillIndex(null); setShowSkillSelect(false); }} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-6 py-2 rounded font-bold transition-all">CANCELAR</button>
+                        )}
+                        <button onClick={() => { if (!customSkillName.trim()) return; handleSelectSkill({ name: customSkillName, attr: customSkillAttr, attr2: customSkillAttr2 }); setCustomSkillName(""); }} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-6 py-2 rounded font-bold transition-all active:scale-95">
+                          {editingSkillIndex !== null ? 'SALVAR ALTERAÇÕES' : 'CRIAR PERÍCIA'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeChar.skills.map((skill, idx) => (
-                  <div key={idx} className="flex flex-col p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute === "---" ? "Equipamento" : skill.relatedAttribute}</span>
-                        <h4 className="text-slate-100 font-bold text-sm">{skill.name}</h4>
+                {activeChar.skills.map((skill, idx) => {
+                  const bonus1 = getAttrMod(skill.relatedAttribute);
+                  const bonus2 = skill.relatedAttribute2 ? getAttrMod(skill.relatedAttribute2) : 0;
+                  const totalBonus = RANK_BONUS[skill.rank] + bonus1 + bonus2;
+                  
+                  return (
+                    <div key={idx} className="flex flex-col p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute === "---" ? "Geral" : skill.relatedAttribute}</span>
+                            {skill.relatedAttribute2 && (
+                              <>
+                                <span className="text-[7px] text-slate-600">+</span>
+                                <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute2}</span>
+                              </>
+                            )}
+                          </div>
+                          <h4 className="text-slate-100 font-bold text-sm">{skill.name}</h4>
+                        </div>
+                        <div className="text-xs font-bold text-amber-500">+{totalBonus}</div>
                       </div>
-                      <div className="text-xs font-bold text-amber-500">+{RANK_BONUS[skill.rank] + getAttrMod(skill.relatedAttribute)}</div>
+                      <div className="mt-auto pt-3 border-t border-slate-700/30 flex items-center justify-between">
+                         <span className="text-amber-500 text-[8px] font-bold uppercase tracking-widest">{RANK_NAMES[skill.rank]}</span>
+                         <div className="flex gap-2">
+                           {isEditing ? (
+                             <>
+                               <button onClick={() => handleRemoveSkill(idx)} className="text-[9px] px-2 py-1 bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-800/50 rounded font-bold transition-colors">Remover</button>
+                               <button onClick={() => handleEditSkillStart(idx)} className="text-[9px] px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded font-bold transition-colors">Editar</button>
+                               <button onClick={() => handleUpgradeSkill(idx)} className="text-[9px] px-2 py-1 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition-colors" disabled={skill.rank === 'S'}>UP</button>
+                             </>
+                           ) : (
+                             <button onClick={() => handleRoll(skill.name, totalBonus)} className="text-[9px] font-bold text-slate-500 hover:text-amber-500 transition-colors">ROLAR</button>
+                           )}
+                         </div>
+                      </div>
                     </div>
-                    <div className="mt-auto pt-3 border-t border-slate-700/30 flex items-center justify-between">
-                       <span className="text-amber-500 text-[8px] font-bold uppercase tracking-widest">{RANK_NAMES[skill.rank]}</span>
-                       <div className="flex gap-2">
-                         {isEditing ? (
-                           <>
-                             <button onClick={() => handleRemoveSkill(idx)} className="text-[9px] px-2 py-1 bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-800/50 rounded font-bold transition-colors">Remover</button>
-                             <button onClick={() => handleUpgradeSkill(idx)} className="text-[9px] px-2 py-1 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition-colors" disabled={skill.rank === 'S'}>UP</button>
-                           </>
-                         ) : (
-                           <button onClick={() => handleRoll(skill.name, RANK_BONUS[skill.rank] + getAttrMod(skill.relatedAttribute))} className="text-[9px] font-bold text-slate-500 hover:text-amber-500 transition-colors">ROLAR</button>
-                         )}
-                       </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
