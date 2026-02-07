@@ -110,8 +110,24 @@ const App: React.FC = () => {
   const [editingSkillIndex, setEditingSkillIndex] = useState<number | null>(null);
   const [showSpellForm, setShowSpellForm] = useState(false);
   const [showAbilityForm, setShowAbilityForm] = useState(false);
-  const [showItemForm, setShowItemForm] = useState(false);
   
+  // Estados para o formulário de Itens
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [itemFormValues, setItemFormValues] = useState({
+    name: "",
+    type: "weapon" as ItemType,
+    damage: "",
+    defense: 0,
+    description: "",
+    specialAbility: "",
+    attackBonus: 0,
+    damageBonus: 0,
+    relatedSkillName: "",
+    relatedAttr1: "",
+    relatedAttr2: "",
+  });
+
   const [isSkillDiscounted, setIsSkillDiscounted] = useState(false);
   const [isSkillInitialDuringCreation, setIsSkillInitialDuringCreation] = useState(false);
   const [isSpellDiscounted, setIsSpellDiscounted] = useState(false);
@@ -207,7 +223,6 @@ const App: React.FC = () => {
     if (!skill.name.trim()) return;
     
     if (editingSkillIndex !== null) {
-      // Estamos editando uma perícia existente
       const newSkills = [...activeChar.skills];
       newSkills[editingSkillIndex] = {
         ...newSkills[editingSkillIndex],
@@ -221,7 +236,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // Criando nova perícia
     const initialRank = isSkillInitialDuringCreation ? selectedInitialRank : undefined;
     const cost = calculateSkillUpgradeOnly(selectedInitialRank, isSkillDiscounted) - (initialRank ? calculateSkillUpgradeOnly(initialRank, isSkillDiscounted) : 0);
     const newSkill: Skill = { 
@@ -288,32 +302,96 @@ const App: React.FC = () => {
     setShowAbilityForm(false);
   };
 
-  const handleAddItem = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveItem = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const newItem: Item = { id: crypto.randomUUID(), name: formData.get('name') as string, type: formData.get('type') as ItemType, damage: (formData.get('damage') as string) || undefined, defense: parseInt(formData.get('defense') as string) || 0, description: formData.get('description') as string, specialAbility: formData.get('specialAbility') as string, isEquipped: false };
-    updateActiveChar({ ...activeChar, inventory: [...activeChar.inventory, newItem] });
+    
+    const newItem: Item = { 
+      id: editingItemIndex !== null ? activeChar.inventory[editingItemIndex].id : crypto.randomUUID(), 
+      name: itemFormValues.name, 
+      type: itemFormValues.type, 
+      damage: itemFormValues.damage || undefined, 
+      defense: itemFormValues.defense || 0, 
+      description: itemFormValues.description, 
+      specialAbility: itemFormValues.specialAbility, 
+      isEquipped: editingItemIndex !== null ? activeChar.inventory[editingItemIndex].isEquipped : false,
+      attackBonus: itemFormValues.type === 'weapon' ? itemFormValues.attackBonus : undefined,
+      damageBonus: itemFormValues.type === 'weapon' ? itemFormValues.damageBonus : undefined,
+      relatedSkillName: itemFormValues.type === 'weapon' ? itemFormValues.relatedSkillName : undefined,
+      relatedAttr1: itemFormValues.type === 'weapon' ? itemFormValues.relatedAttr1 : undefined,
+      relatedAttr2: itemFormValues.type === 'weapon' ? itemFormValues.relatedAttr2 : undefined,
+    };
+
+    let newInventory = [...activeChar.inventory];
+    if (editingItemIndex !== null) {
+      newInventory[editingItemIndex] = newItem;
+    } else {
+      newInventory.push(newItem);
+    }
+
+    updateActiveChar({ ...activeChar, inventory: newInventory });
     setShowItemForm(false);
+    setEditingItemIndex(null);
+    setItemFormValues({
+      name: "", type: "weapon", damage: "", defense: 0, description: "", specialAbility: "", 
+      attackBonus: 0, damageBonus: 0, relatedSkillName: "", relatedAttr1: "", relatedAttr2: ""
+    });
+  };
+
+  const handleEditItemStart = (idx: number) => {
+    const item = activeChar.inventory[idx];
+    setEditingItemIndex(idx);
+    setItemFormValues({
+      name: item.name || "",
+      type: item.type || "weapon",
+      damage: item.damage || "",
+      defense: item.defense || 0,
+      description: item.description || "",
+      specialAbility: item.specialAbility || "",
+      attackBonus: item.attackBonus || 0,
+      damageBonus: item.damageBonus || 0,
+      relatedSkillName: item.relatedSkillName || "",
+      relatedAttr1: item.relatedAttr1 || "",
+      relatedAttr2: item.relatedAttr2 || "",
+    });
+    setShowItemForm(true);
   };
 
   const handleRoll = (name: string, bonus: number) => {
     const d20 = Math.floor(Math.random() * 20) + 1;
     const total = d20 + bonus;
     setRollResult({ name, roll: d20, bonus, total });
-    
-    // Notificação Discord
     notifyDiscordRoll(activeChar.name, name, total, d20, bonus);
-
     setTimeout(() => setRollResult(null), 5000);
+  };
+
+  const handleAttackRoll = (item: Item) => {
+    const skill = activeChar.skills.find(s => s.name === item.relatedSkillName);
+    let skillBonus = 0;
+    if (skill) {
+      const b1 = getAttrMod(skill.relatedAttribute);
+      const b2 = skill.relatedAttribute2 ? getAttrMod(skill.relatedAttribute2) : 0;
+      skillBonus = RANK_BONUS[skill.rank] + b1 + b2;
+    }
+    const attackBonus = item.attackBonus || 0;
+    const totalBonus = skillBonus + attackBonus;
+    handleRoll(`Ataque: ${item.name}`, totalBonus);
   };
 
   const handleDamageRoll = (item: Item) => {
     if (!item.damage) return;
+    
     const parts = item.damage.toLowerCase().replace(/\s/g, '').split('+');
     const dicePart = parts[0].split('d');
     const numDice = parseInt(dicePart[0]) || 1;
     const dieSize = parseInt(dicePart[1]) || 6;
-    const staticBonus = parseInt(parts[1]) || 0;
+    const weaponStaticBonus = parseInt(parts[1]) || 0;
+    
+    const attr1Bonus = item.relatedAttr1 ? getAttrMod(item.relatedAttr1) : 0;
+    const attr2Bonus = item.relatedAttr2 ? getAttrMod(item.relatedAttr2) : 0;
+    const itemDamageBonus = item.damageBonus || 0;
+    
+    const totalStaticBonus = weaponStaticBonus + attr1Bonus + attr2Bonus + itemDamageBonus;
+
     let totalRoll = 0;
     const rolls = [];
     for (let i = 0; i < numDice; i++) {
@@ -321,13 +399,11 @@ const App: React.FC = () => {
         rolls.push(r);
         totalRoll += r;
     }
-    const finalTotal = totalRoll + staticBonus;
+    const finalTotal = totalRoll + totalStaticBonus;
     const rollDisplay = rolls.join(' + ');
-    setRollResult({ name: `Dano: ${item.name}`, roll: rollDisplay, bonus: staticBonus, total: finalTotal, isDamage: true });
     
-    // Notificação Discord
-    notifyDiscordRoll(activeChar.name, `Dano: ${item.name}`, finalTotal, rollDisplay, staticBonus);
-
+    setRollResult({ name: `Dano: ${item.name}`, roll: rollDisplay, bonus: totalStaticBonus, total: finalTotal, isDamage: true });
+    notifyDiscordRoll(activeChar.name, `Dano: ${item.name}`, finalTotal, rollDisplay, totalStaticBonus);
     setTimeout(() => setRollResult(null), 5000);
   };
 
@@ -354,45 +430,24 @@ const App: React.FC = () => {
     <div className="min-h-screen pb-20">
       <nav className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-amber-500/20 px-4 py-3 flex flex-col gap-3 shadow-lg">
         <div className="max-w-6xl mx-auto w-full flex flex-col gap-4">
-          
           <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
             {folders.map(f => {
               const showRename = isEditing && f !== "Geral";
               return (
                 <div key={f} className="flex items-center shrink-0 group h-9">
-                  <button
-                    onClick={() => setCurrentFolder(f)}
-                    className={`flex items-center gap-2 px-4 h-full border text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap 
-                      ${currentFolder === f ? 'bg-amber-600/20 border-amber-500 text-amber-500' : 'bg-slate-800/50 border-slate-700 text-slate-500 hover:border-slate-500'}
-                      ${showRename ? 'rounded-l-lg border-r-0' : 'rounded-lg'}
-                    `}
-                  >
+                  <button onClick={() => setCurrentFolder(f)} className={`flex items-center gap-2 px-4 h-full border text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${currentFolder === f ? 'bg-amber-600/20 border-amber-500 text-amber-500' : 'bg-slate-800/50 border-slate-700 text-slate-500 hover:border-slate-500'} ${showRename ? 'rounded-l-lg border-r-0' : 'rounded-lg'}`}>
                     <span className="text-sm">📂</span> {f}
                   </button>
                   {showRename && (
-                    <button 
-                      onClick={() => handleRenameFolder(f)}
-                      className={`px-3 h-full rounded-r-lg border border-l-0 text-[10px] transition-all
-                        ${currentFolder === f ? 'bg-amber-600/20 border-amber-500 text-amber-500' : 'bg-slate-800/50 border-slate-700 text-slate-500 hover:text-amber-400'}
-                      `}
-                      title="Renomear Pasta"
-                    >
-                      ✏️
-                    </button>
+                    <button onClick={() => handleRenameFolder(f)} className={`px-3 h-full rounded-r-lg border border-l-0 text-[10px] transition-all ${currentFolder === f ? 'bg-amber-600/20 border-amber-500 text-amber-500' : 'bg-slate-800/50 border-slate-700 text-slate-500 hover:text-amber-400'}`} title="Renomear Pasta">✏️</button>
                   )}
                 </div>
               );
             })}
             {isEditing && (
-              <button 
-                onClick={handleCreateFolder}
-                className="px-4 h-9 shrink-0 rounded-lg border border-dashed border-slate-700 text-slate-600 text-[10px] font-bold hover:text-amber-500 hover:border-amber-500 whitespace-nowrap transition-all"
-              >
-                + NOVA PASTA
-              </button>
+              <button onClick={handleCreateFolder} className="px-4 h-9 shrink-0 rounded-lg border border-dashed border-slate-700 text-slate-600 text-[10px] font-bold hover:text-amber-500 hover:border-amber-500 whitespace-nowrap transition-all">+ NOVA PASTA</button>
             )}
           </div>
-
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 overflow-x-auto">
               {filteredCharacters.length > 0 ? filteredCharacters.map((char) => {
@@ -406,38 +461,12 @@ const App: React.FC = () => {
               }) : (
                 <span className="text-[10px] text-slate-600 italic px-2">Nenhum herói nesta pasta...</span>
               )}
-              <button onClick={() => {
-                const newChar = createNewCharacterData("Novo Aventureiro", currentFolder);
-                const newChars = [...characters, newChar];
-                setCharacters(newChars);
-                setActiveIndex(newChars.length - 1);
-              }} className="w-8 h-8 rounded-full bg-slate-800 border border-dashed border-slate-600 text-slate-500 flex items-center justify-center hover:text-amber-500 hover:border-amber-500 transition-all text-xl" title="Novo Personagem">+</button>
+              <button onClick={() => { const newChar = createNewCharacterData("Novo Aventureiro", currentFolder); const newChars = [...characters, newChar]; setCharacters(newChars); setActiveIndex(newChars.length - 1); }} className="w-8 h-8 rounded-full bg-slate-800 border border-dashed border-slate-600 text-slate-500 flex items-center justify-center hover:text-amber-500 hover:border-amber-500 transition-all text-xl" title="Novo Personagem">+</button>
             </div>
-
             <div className="flex items-center gap-2">
               <button onClick={() => { const data = JSON.stringify(characters, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'fichas.json'; a.click(); }} className="px-3 py-1.5 rounded bg-slate-800 border border-amber-500/20 text-amber-400 text-[10px] font-bold uppercase hover:bg-slate-700">📤 Exportar</button>
               <button onClick={() => importInputRef.current?.click()} className="px-3 py-1.5 rounded bg-slate-800 border border-amber-500/20 text-amber-400 text-[10px] font-bold uppercase hover:bg-slate-700">📥 Importar</button>
-              <input type="file" ref={importInputRef} onChange={(e) => { 
-                const file = e.target.files?.[0]; 
-                if (file) { 
-                  const reader = new FileReader(); 
-                  reader.onload = (ev) => { 
-                    try { 
-                      const importedData = JSON.parse(ev.target?.result as string); 
-                      const newOnes = (Array.isArray(importedData) ? importedData : [importedData]).map(c => ({
-                        ...c,
-                        id: crypto.randomUUID()
-                      }));
-                      setCharacters(prev => [...prev, ...newOnes]); 
-                      alert(`${newOnes.length} personagem(ns) adicionado(s) com sucesso!`);
-                    } catch (err) { 
-                      alert("Erro ao importar: formato de arquivo inválido."); 
-                    } 
-                  }; 
-                  reader.readAsText(file); 
-                  e.target.value = '';
-                } 
-              }} className="hidden" accept=".json" />
+              <input type="file" ref={importInputRef} onChange={(e) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => { try { const importedData = JSON.parse(ev.target?.result as string); const newOnes = (Array.isArray(importedData) ? importedData : [importedData]).map(c => ({ ...c, id: crypto.randomUUID() })); setCharacters(prev => [...prev, ...newOnes]); alert(`${newOnes.length} personagem(ns) adicionado(s) com sucesso!`); } catch (err) { alert("Erro ao importar: formato de arquivo inválido."); } }; reader.readAsText(file); e.target.value = ''; } }} className="hidden" accept=".json" />
             </div>
           </div>
         </div>
@@ -458,11 +487,7 @@ const App: React.FC = () => {
                     <input type="text" value={activeChar.name} onChange={e => updateActiveChar({...activeChar, name: e.target.value})} className="text-3xl font-cinzel font-bold text-amber-500 bg-transparent border-b border-amber-500/30 outline-none w-full" placeholder="Nome do Herói" />
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-slate-500 font-bold uppercase">Mover para:</span>
-                      <select 
-                        value={activeChar.folder || "Geral"} 
-                        onChange={e => updateActiveChar({...activeChar, folder: e.target.value})}
-                        className="bg-slate-800 border border-slate-700 text-amber-500 text-[10px] px-2 py-1 rounded outline-none"
-                      >
+                      <select value={activeChar.folder || "Geral"} onChange={e => updateActiveChar({...activeChar, folder: e.target.value})} className="bg-slate-800 border border-slate-700 text-amber-500 text-[10px] px-2 py-1 rounded outline-none">
                         {folders.map(f => <option key={f} value={f}>{f}</option>)}
                       </select>
                     </div>
@@ -483,21 +508,6 @@ const App: React.FC = () => {
           </div>
           <div className="flex flex-col gap-2">
             <button onClick={() => setIsEditing(!isEditing)} className={`px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-[11px] transition-all border-b-4 ${isEditing ? 'bg-green-600 border-green-800' : 'bg-amber-600 border-amber-800 active:translate-y-1 active:border-b-0'}`}>{isEditing ? '✓ SALVAR' : '⚔ EVOLUIR'}</button>
-            {isEditing && (
-              <button 
-                onClick={() => {
-                  if (confirm(`Excluir ${activeChar.name}? Esta ação é permanente.`)) {
-                    const newChars = characters.filter((_, i) => i !== activeIndex);
-                    setCharacters(newChars);
-                    setActiveIndex(0);
-                    setIsEditing(false);
-                  }
-                }}
-                className="text-[9px] text-red-500 font-bold hover:underline self-center uppercase tracking-tighter"
-              >
-                Deletar Personagem
-              </button>
-            )}
           </div>
         </header>
 
@@ -507,45 +517,7 @@ const App: React.FC = () => {
               <h2 className="text-xl font-medieval text-amber-200 mb-4 flex items-center gap-2">𖤍 Atributos Rúnicos</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {activeChar.attributes.map((attr, idx) => (
-                  <AttributeCard 
-                    key={idx} 
-                    attr={attr} 
-                    isEditing={isEditing} 
-                    xpCost={getAttrXPCostForNextPoint(attr.value)} 
-                    canAfford={availableXp >= getAttrXPCostForNextPoint(attr.value)} 
-                    onUpgrade={() => {
-                      const cost = getAttrXPCostForNextPoint(attr.value);
-                      if (availableXp >= cost) {
-                        const newAttributes = activeChar.attributes.map((a, i) => 
-                          i === idx ? { ...a, value: a.value + 1 } : a
-                        );
-                        const log = { id: crypto.randomUUID(), timestamp: Date.now(), description: `Melhoria Atributo: ${attr.name} (${attr.value} → ${attr.value + 1})`, cost };
-                        updateActiveChar({ ...activeChar, attributes: newAttributes, xpLog: [log, ...(activeChar.xpLog || [])] });
-                      }
-                    }}
-                    onDowngrade={() => {
-                      if (attr.value > 0) {
-                        const refund = getAttrXPCostForNextPoint(attr.value - 1);
-                        const newAttributes = activeChar.attributes.map((a, i) => 
-                          i === idx ? { ...a, value: a.value - 1 } : a
-                        );
-                        const log = { 
-                          id: crypto.randomUUID(), 
-                          timestamp: Date.now(), 
-                          description: `Reversão Atributo: ${attr.name} (${attr.value} → ${attr.value - 1}) (Reembolso de ${refund} XP)`, 
-                          cost: -refund 
-                        };
-                        updateActiveChar({ ...activeChar, attributes: newAttributes, xpLog: [log, ...(activeChar.xpLog || [])] });
-                      }
-                    }}
-                    onRacialChange={(val) => { 
-                      const newAttributes = activeChar.attributes.map((a, i) => 
-                        i === idx ? { ...a, racialBonus: val } : a
-                      );
-                      updateActiveChar({...activeChar, attributes: newAttributes}); 
-                    }} 
-                    onRoll={handleRoll} 
-                  />
+                  <AttributeCard key={idx} attr={attr} isEditing={isEditing} xpCost={getAttrXPCostForNextPoint(attr.value)} canAfford={availableXp >= getAttrXPCostForNextPoint(attr.value)} onUpgrade={() => { const cost = getAttrXPCostForNextPoint(attr.value); if (availableXp >= cost) { const newAttributes = activeChar.attributes.map((a, i) => i === idx ? { ...a, value: a.value + 1 } : a); const log = { id: crypto.randomUUID(), timestamp: Date.now(), description: `Melhoria Atributo: ${attr.name} (${attr.value} → ${attr.value + 1})`, cost }; updateActiveChar({ ...activeChar, attributes: newAttributes, xpLog: [log, ...(activeChar.xpLog || [])] }); } }} onDowngrade={() => { if (attr.value > 0) { const refund = getAttrXPCostForNextPoint(attr.value - 1); const newAttributes = activeChar.attributes.map((a, i) => i === idx ? { ...a, value: a.value - 1 } : a); const log = { id: crypto.randomUUID(), timestamp: Date.now(), description: `Reversão Atributo: ${attr.name} (${attr.value} → ${attr.value - 1}) (Reembolso de ${refund} XP)`, cost: -refund }; updateActiveChar({ ...activeChar, attributes: newAttributes, xpLog: [log, ...(activeChar.xpLog || [])] }); } }} onRacialChange={(val) => { const newAttributes = activeChar.attributes.map((a, i) => i === idx ? { ...a, racialBonus: val } : a); updateActiveChar({...activeChar, attributes: newAttributes}); }} onRoll={handleRoll} />
                 ))}
               </div>
             </section>
@@ -557,15 +529,7 @@ const App: React.FC = () => {
                   <div className="flex gap-2">
                     <button onClick={() => setIsSkillDiscounted(!isSkillDiscounted)} className={`text-[8px] px-2 py-1 rounded font-bold border transition-colors ${isSkillDiscounted ? 'bg-indigo-600 border-indigo-400' : 'bg-slate-800 border-slate-700'}`}>50% OFF</button>
                     <button onClick={() => setIsSkillInitialDuringCreation(!isSkillInitialDuringCreation)} className={`text-[8px] px-2 py-1 rounded font-bold border transition-colors ${isSkillInitialDuringCreation ? 'bg-green-600 border-green-400' : 'bg-slate-800 border-slate-700'}`}>INICIAL</button>
-                    <button onClick={() => { 
-                      setEditingSkillIndex(null); 
-                      setCustomSkillName(""); 
-                      setCustomSkillAttr("---"); 
-                      setCustomSkillAttr2("---"); 
-                      setShowSkillSelect(!showSkillSelect); 
-                    }} className="bg-amber-600 text-[10px] px-3 py-1 rounded font-bold transition-transform active:scale-95">
-                      {showSkillSelect ? 'FECHAR' : '+ ADICIONAR'}
-                    </button>
+                    <button onClick={() => { setEditingSkillIndex(null); setCustomSkillName(""); setCustomSkillAttr("---"); setCustomSkillAttr2("---"); setShowSkillSelect(!showSkillSelect); }} className="bg-amber-600 text-[10px] px-3 py-1 rounded font-bold transition-transform active:scale-95">{showSkillSelect ? 'FECHAR' : '+ ADICIONAR'}</button>
                   </div>
                 )}
               </div>
@@ -587,39 +551,17 @@ const App: React.FC = () => {
                       </div>
                     </>
                   )}
-                  
                   <div className="space-y-4 pt-4 border-t border-amber-500/10">
-                    <div className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest border-l-2 border-indigo-500 pl-2">
-                      {editingSkillIndex !== null ? 'Editando Perícia' : 'Perícia Personalizada'}
-                    </div>
+                    <div className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest border-l-2 border-indigo-500 pl-2">{editingSkillIndex !== null ? 'Editando Perícia' : 'Perícia Personalizada'}</div>
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" placeholder="Nome da Perícia" className="flex-1 bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors" value={customSkillName} onChange={e => setCustomSkillName(e.target.value)} />
                         <div className="flex gap-2">
-                          <div className="flex flex-col">
-                            <span className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Primário</span>
-                            <select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr} onChange={e => setCustomSkillAttr(e.target.value)}>
-                              {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
-                              <option value="---">--- (Geral)</option>
-                            </select>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Secundário (Opcional)</span>
-                            <select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr2} onChange={e => setCustomSkillAttr2(e.target.value)}>
-                              <option value="---">--- Nenhum ---</option>
-                              {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
-                            </select>
-                          </div>
+                          <div className="flex flex-col"><span className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Primário</span><select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr} onChange={e => setCustomSkillAttr(e.target.value)}>{activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}<option value="---">--- (Geral)</option></select></div>
+                          <div className="flex flex-col"><span className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Secundário (Opcional)</span><select className="bg-slate-800 p-2.5 rounded text-[10px] border border-slate-700 outline-none focus:border-indigo-500 transition-colors min-w-[150px]" value={customSkillAttr2} onChange={e => setCustomSkillAttr2(e.target.value)}><option value="---">--- Nenhum ---</option>{activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}</select></div>
                         </div>
                       </div>
-                      <div className="flex gap-2 self-end">
-                        {editingSkillIndex !== null && (
-                          <button onClick={() => { setEditingSkillIndex(null); setShowSkillSelect(false); }} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-6 py-2 rounded font-bold transition-all">CANCELAR</button>
-                        )}
-                        <button onClick={() => { if (!customSkillName.trim()) return; handleSelectSkill({ name: customSkillName, attr: customSkillAttr, attr2: customSkillAttr2 }); setCustomSkillName(""); }} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-6 py-2 rounded font-bold transition-all active:scale-95">
-                          {editingSkillIndex !== null ? 'SALVAR ALTERAÇÕES' : 'CRIAR PERÍCIA'}
-                        </button>
-                      </div>
+                      <div className="flex gap-2 self-end">{editingSkillIndex !== null && (<button onClick={() => { setEditingSkillIndex(null); setShowSkillSelect(false); }} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-6 py-2 rounded font-bold transition-all">CANCELAR</button>)}<button onClick={() => { if (!customSkillName.trim()) return; handleSelectSkill({ name: customSkillName, attr: customSkillAttr, attr2: customSkillAttr2 }); setCustomSkillName(""); }} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-6 py-2 rounded font-bold transition-all active:scale-95">{editingSkillIndex !== null ? 'SALVAR ALTERAÇÕES' : 'CRIAR PERÍCIA'}</button></div>
                     </div>
                   </div>
                 </div>
@@ -629,37 +571,18 @@ const App: React.FC = () => {
                   const bonus1 = getAttrMod(skill.relatedAttribute);
                   const bonus2 = skill.relatedAttribute2 ? getAttrMod(skill.relatedAttribute2) : 0;
                   const totalBonus = RANK_BONUS[skill.rank] + bonus1 + bonus2;
-                  
                   return (
                     <div key={idx} className="flex flex-col p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute === "---" ? "Geral" : skill.relatedAttribute}</span>
-                            {skill.relatedAttribute2 && (
-                              <>
-                                <span className="text-[7px] text-slate-600">+</span>
-                                <span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute2}</span>
-                              </>
-                            )}
-                          </div>
+                          <div className="flex items-center gap-1"><span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute === "---" ? "Geral" : skill.relatedAttribute}</span>{skill.relatedAttribute2 && (<><span className="text-[7px] text-slate-600">+</span><span className="text-[7px] uppercase font-bold text-slate-500">{skill.relatedAttribute2}</span></>)}</div>
                           <h4 className="text-slate-100 font-bold text-sm">{skill.name}</h4>
                         </div>
                         <div className="text-xs font-bold text-amber-500">+{totalBonus}</div>
                       </div>
                       <div className="mt-auto pt-3 border-t border-slate-700/30 flex items-center justify-between">
                          <span className="text-amber-500 text-[8px] font-bold uppercase tracking-widest">{RANK_NAMES[skill.rank]}</span>
-                         <div className="flex gap-2">
-                           {isEditing ? (
-                             <>
-                               <button onClick={() => handleRemoveSkill(idx)} className="text-[9px] px-2 py-1 bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-800/50 rounded font-bold transition-colors">Remover</button>
-                               <button onClick={() => handleEditSkillStart(idx)} className="text-[9px] px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded font-bold transition-colors">Editar</button>
-                               <button onClick={() => handleUpgradeSkill(idx)} className="text-[9px] px-2 py-1 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition-colors" disabled={skill.rank === 'S'}>UP</button>
-                             </>
-                           ) : (
-                             <button onClick={() => handleRoll(skill.name, totalBonus)} className="text-[9px] font-bold text-slate-500 hover:text-amber-500 transition-colors">ROLAR</button>
-                           )}
-                         </div>
+                         <div className="flex gap-2">{isEditing ? (<><button onClick={() => handleRemoveSkill(idx)} className="text-[9px] px-2 py-1 bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-800/50 rounded font-bold transition-colors">Remover</button><button onClick={() => handleEditSkillStart(idx)} className="text-[9px] px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded font-bold transition-colors">Editar</button><button onClick={() => handleUpgradeSkill(idx)} className="text-[9px] px-2 py-1 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition-colors" disabled={skill.rank === 'S'}>UP</button></>) : (<button onClick={() => handleRoll(skill.name, totalBonus)} className="text-[9px] font-bold text-slate-500 hover:text-amber-500 transition-colors">ROLAR</button>)}</div>
                       </div>
                     </div>
                   );
@@ -669,61 +592,161 @@ const App: React.FC = () => {
 
             <section className="glass-panel p-6 rounded-2xl border-amber-500/10">
               <div className="flex justify-between items-center mb-6 border-b border-amber-500/10 pb-2">
-                <h2 className="text-xl font-medieval text-amber-200">⚔️ Habilidades</h2>
-                {isEditing && <button onClick={() => setShowAbilityForm(!showAbilityForm)} className="bg-indigo-600 text-[10px] px-3 py-1 rounded font-bold transition-transform active:scale-95">+ NOVA</button>}
-              </div>
-              {showAbilityForm && (
-                <form onSubmit={handleAddAbility} className="mb-8 p-6 bg-slate-900/50 rounded-xl border border-amber-500/20 space-y-4 animate-in slide-in-from-top-4">
-                  <input name="name" placeholder="Nome da Habilidade" required className="w-full bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
-                  <textarea name="description" placeholder="Descrição dos efeitos..." required className="w-full bg-slate-800 p-2 rounded text-xs h-24 border border-slate-700 outline-none focus:border-amber-500" />
-                  <button type="submit" className="w-full bg-indigo-600 py-2 rounded font-bold text-xs hover:bg-indigo-500 transition-colors">ADICIONAR</button>
-                </form>
-              )}
-              <div className="space-y-4">
-                {activeChar.abilities.map((ab, idx) => (
-                  <div key={idx} className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-amber-500/30 transition-all">
-                    <h4 className="text-amber-200 font-bold font-cinzel text-base">{ab.name}</h4>
-                    <p className="text-sm text-slate-300 leading-relaxed mt-1 whitespace-pre-wrap">{ab.description}</p>
-                    {isEditing && <button onClick={() => { const n = activeChar.abilities.filter((_, i) => i !== idx); updateActiveChar({...activeChar, abilities: n}); }} className="mt-2 text-[8px] text-red-500 uppercase font-bold hover:underline">Remover</button>}
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="glass-panel p-6 rounded-2xl border-amber-500/10">
-              <div className="flex justify-between items-center mb-6 border-b border-amber-500/10 pb-2">
                 <h2 className="text-xl font-medieval text-amber-200">🗡️ Inventário</h2>
-                {isEditing && <button onClick={() => setShowItemForm(!showItemForm)} className="bg-indigo-600 text-[10px] px-3 py-1 rounded font-bold transition-transform active:scale-95">+ ITEM</button>}
+                {isEditing && (
+                  <button onClick={() => { 
+                    setEditingItemIndex(null);
+                    setItemFormValues({
+                      name: "", type: "weapon", damage: "", defense: 0, description: "", specialAbility: "", 
+                      attackBonus: 0, damageBonus: 0, relatedSkillName: "", relatedAttr1: "", relatedAttr2: ""
+                    });
+                    setShowItemForm(!showItemForm); 
+                  }} className="bg-indigo-600 text-[10px] px-3 py-1 rounded font-bold transition-transform active:scale-95">
+                    {showItemForm ? 'FECHAR' : '+ ITEM'}
+                  </button>
+                )}
               </div>
               {showItemForm && (
-                <form onSubmit={handleAddItem} className="mb-8 p-6 bg-slate-900/50 rounded-xl border border-amber-500/20 space-y-4 animate-in slide-in-from-top-4">
+                <form onSubmit={handleSaveItem} className="mb-8 p-6 bg-slate-900/50 rounded-xl border border-amber-500/20 space-y-4 animate-in slide-in-from-top-4">
                   <div className="grid grid-cols-2 gap-4">
-                    <input name="name" placeholder="Nome do Objeto" required className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
-                    <select name="type" className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500"><option value="weapon">Arma</option><option value="armor">Armadura</option><option value="utility">Utilitário</option></select>
+                    <div className="flex flex-col">
+                      <label className="text-[7px] text-slate-500 mb-1 uppercase">Nome do Objeto</label>
+                      <input value={itemFormValues.name} onChange={e => setItemFormValues({...itemFormValues, name: e.target.value})} placeholder="Nome" required className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
+                    </div>
+                    <div className="flex flex-col">
+                      <label className="text-[7px] text-slate-500 mb-1 uppercase">Tipo</label>
+                      <select value={itemFormValues.type} className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" onChange={(e) => setItemFormValues({...itemFormValues, type: e.target.value as ItemType})}>
+                        <option value="weapon">Arma</option>
+                        <option value="armor">Armadura</option>
+                        <option value="utility">Utilitário</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <input name="damage" placeholder="Dano (ex: 1d8+2)" className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
-                    <input name="defense" type="number" placeholder="Defesa" className="bg-slate-800 p-2 rounded text-xs border border-slate-700 outline-none focus:border-amber-500" />
+                  
+                  {itemFormValues.type === 'weapon' && (
+                    <div className="space-y-4 p-4 bg-slate-950/40 rounded-lg border border-amber-500/10">
+                      <div className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-2">Configurações de Combate</div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 mb-1 uppercase">Dano Base (ex: 1d8+2)</label>
+                          <input value={itemFormValues.damage} onChange={e => setItemFormValues({...itemFormValues, damage: e.target.value})} placeholder="1d8+2" className="bg-slate-800 p-2 rounded text-xs border border-slate-700" />
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 mb-1 uppercase">Acerto Bônus Item</label>
+                          <input value={itemFormValues.attackBonus} onChange={e => setItemFormValues({...itemFormValues, attackBonus: parseInt(e.target.value) || 0})} type="number" placeholder="0" className="bg-slate-800 p-2 rounded text-xs border border-slate-700" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 mb-1 uppercase">Dano Bônus Item</label>
+                          <input value={itemFormValues.damageBonus} onChange={e => setItemFormValues({...itemFormValues, damageBonus: parseInt(e.target.value) || 0})} type="number" placeholder="0" className="bg-slate-800 p-2 rounded text-xs border border-slate-700" />
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 mb-1 uppercase">Perícia p/ Acerto</label>
+                          <select value={itemFormValues.relatedSkillName} onChange={e => setItemFormValues({...itemFormValues, relatedSkillName: e.target.value})} className="bg-slate-800 p-2 rounded text-xs border border-slate-700">
+                            <option value="">Nenhuma</option>
+                            {activeChar.skills.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Dano 1</label>
+                          <select value={itemFormValues.relatedAttr1} onChange={e => setItemFormValues({...itemFormValues, relatedAttr1: e.target.value})} className="bg-slate-800 p-2 rounded text-xs border border-slate-700">
+                            <option value="">Nenhum</option>
+                            {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="text-[7px] text-slate-500 mb-1 uppercase">Atributo Dano 2</label>
+                          <select value={itemFormValues.relatedAttr2} onChange={e => setItemFormValues({...itemFormValues, relatedAttr2: e.target.value})} className="bg-slate-800 p-2 rounded text-xs border border-slate-700">
+                            <option value="">Nenhum</option>
+                            {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {itemFormValues.type === 'armor' && (
+                    <div className="flex flex-col">
+                      <label className="text-[7px] text-slate-500 mb-1 uppercase">Bônus de Defesa (CA)</label>
+                      <input value={itemFormValues.defense} onChange={e => setItemFormValues({...itemFormValues, defense: parseInt(e.target.value) || 0})} type="number" placeholder="Defesa" className="bg-slate-800 p-2 rounded text-xs border border-slate-700" />
+                    </div>
+                  )}
+
+                  <div className="flex flex-col">
+                    <label className="text-[7px] text-slate-500 mb-1 uppercase">Descrição do item</label>
+                    <textarea value={itemFormValues.description} onChange={e => setItemFormValues({...itemFormValues, description: e.target.value})} placeholder="..." className="w-full bg-slate-800 p-2 rounded text-xs h-20 border border-slate-700 outline-none focus:border-amber-500" />
                   </div>
-                  <textarea name="description" placeholder="Descrição do item..." className="w-full bg-slate-800 p-2 rounded text-xs h-20 border border-slate-700 outline-none focus:border-amber-500" />
-                  <button type="submit" className="w-full bg-green-600 py-2 rounded font-bold text-xs hover:bg-green-500 transition-colors uppercase">Forjar Item</button>
+                  <div className="flex gap-2">
+                    {editingItemIndex !== null && (
+                      <button type="button" onClick={() => { setEditingItemIndex(null); setShowItemForm(false); }} className="flex-1 bg-slate-700 py-2 rounded font-bold text-xs hover:bg-slate-600 transition-colors uppercase">Cancelar</button>
+                    )}
+                    <button type="submit" className="flex-[2] bg-green-600 py-2 rounded font-bold text-xs hover:bg-green-500 transition-colors uppercase">
+                      {editingItemIndex !== null ? 'Salvar Alterações' : 'Forjar Item'}
+                    </button>
+                  </div>
                 </form>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeChar.inventory.map((item) => (
-                  <div key={item.id} className={`p-4 rounded-xl bg-slate-800/40 border transition-all ${item.isEquipped ? 'border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.1)]' : 'border-slate-700/50'} flex flex-col group`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div><h4 className="text-amber-200 font-bold font-cinzel text-sm">{item.name}</h4></div>
-                      <div className="flex gap-2">
-                        {item.damage && <button onClick={() => handleDamageRoll(item)} className="bg-red-900/50 hover:bg-red-800 transition-colors text-[10px] px-2 py-1 rounded-full border border-red-700">⚔️ {item.damage}</button>}
-                        <button onClick={() => { const n = activeChar.inventory.map(i => i.id === item.id ? { ...i, isEquipped: !i.isEquipped } : i); updateActiveChar({ ...activeChar, inventory: n }); }} className={`text-[8px] font-bold px-2 py-1 rounded transition-colors ${item.isEquipped ? 'bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'}`}>{item.isEquipped ? 'EQUIPADO' : 'EQUIPAR'}</button>
+                {activeChar.inventory.map((item, idx) => {
+                  const isWeapon = item.type === 'weapon';
+                  
+                  let currentAttackDisplay = "";
+                  if (isWeapon && item.relatedSkillName) {
+                    const skill = activeChar.skills.find(s => s.name === item.relatedSkillName);
+                    if (skill) {
+                      const b1 = getAttrMod(skill.relatedAttribute);
+                      const b2 = skill.relatedAttribute2 ? getAttrMod(skill.relatedAttribute2) : 0;
+                      const skillBonus = RANK_BONUS[skill.rank] + b1 + b2;
+                      currentAttackDisplay = `+${skillBonus + (item.attackBonus || 0)}`;
+                    }
+                  } else if (isWeapon) {
+                    currentAttackDisplay = `+${item.attackBonus || 0}`;
+                  }
+
+                  let currentDamageBonus = 0;
+                  if (isWeapon) {
+                    const a1 = item.relatedAttr1 ? getAttrMod(item.relatedAttr1) : 0;
+                    const a2 = item.relatedAttr2 ? getAttrMod(item.relatedAttr2) : 0;
+                    currentDamageBonus = a1 + a2 + (item.damageBonus || 0);
+                  }
+
+                  return (
+                    <div key={item.id} className={`p-4 rounded-xl bg-slate-800/40 border transition-all ${item.isEquipped ? 'border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.1)]' : 'border-slate-700/50'} flex flex-col group`}>
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <div className="text-[7px] uppercase font-bold text-slate-500">{item.type === 'weapon' ? 'Arma' : item.type === 'armor' ? 'Armadura' : 'Utilitário'}</div>
+                          <h4 className="text-amber-200 font-bold font-cinzel text-sm">{item.name}</h4>
+                        </div>
+                        <div className="flex flex-col gap-1 items-end">
+                          <button onClick={() => { const n = activeChar.inventory.map(i => i.id === item.id ? { ...i, isEquipped: !i.isEquipped } : i); updateActiveChar({ ...activeChar, inventory: n }); }} className={`text-[8px] font-bold px-2 py-1 rounded transition-colors ${item.isEquipped ? 'bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'}`}>{item.isEquipped ? 'EQUIPADO' : 'EQUIPAR'}</button>
+                        </div>
                       </div>
+
+                      {isWeapon && (
+                        <div className="flex gap-2 mb-3 mt-1">
+                          <button onClick={() => handleAttackRoll(item)} className="flex-1 bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/40 text-[10px] py-1.5 rounded-lg flex items-center justify-center gap-2 font-bold transition-all">
+                            ⚔️ ACERTO {currentAttackDisplay}
+                          </button>
+                          <button onClick={() => handleDamageRoll(item)} className="flex-1 bg-red-900/40 hover:bg-red-900/60 border border-red-800/50 text-[10px] py-1.5 rounded-lg flex items-center justify-center gap-2 font-bold transition-all">
+                            💥 DANO {item.damage}{currentDamageBonus !== 0 ? (currentDamageBonus > 0 ? `+${currentDamageBonus}` : currentDamageBonus) : ''}
+                          </button>
+                        </div>
+                      )}
+
+                      {item.defense ? <div className="text-[9px] text-green-400 font-bold mb-1">🛡️ Defesa +{item.defense}</div> : null}
+                      {item.description && <p className="text-[10px] text-slate-400 italic mt-1 leading-tight border-l-2 border-slate-600/30 pl-2 mb-2 line-clamp-3 group-hover:line-clamp-none transition-all whitespace-pre-wrap">{item.description}</p>}
+                      {isEditing && (
+                        <div className="mt-auto flex justify-between items-center pt-2">
+                          <button onClick={() => handleEditItemStart(idx)} className="text-[8px] text-amber-500 font-bold uppercase hover:underline">Editar</button>
+                          <button onClick={() => { const n = activeChar.inventory.filter(i => i.id !== item.id); updateActiveChar({...activeChar, inventory: n}); }} className="text-[8px] text-red-500 font-bold uppercase hover:underline">Descartar</button>
+                        </div>
+                      )}
                     </div>
-                    {item.defense ? <div className="text-[9px] text-green-400 font-bold mb-1">🛡️ Defesa +{item.defense}</div> : null}
-                    {item.description && <p className="text-[10px] text-slate-400 italic mt-1 leading-tight border-l-2 border-slate-600/30 pl-2 mb-2 line-clamp-3 group-hover:line-clamp-none transition-all whitespace-pre-wrap">{item.description}</p>}
-                    {isEditing && <button onClick={() => { const n = activeChar.inventory.filter(i => i.id !== item.id); updateActiveChar({...activeChar, inventory: n}); }} className="mt-auto text-[8px] text-red-500 self-end font-bold uppercase hover:underline pt-2">Descartar</button>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           </div>
@@ -760,43 +783,6 @@ const App: React.FC = () => {
                 )) : <div className="text-[10px] text-slate-600 italic text-center py-10">Nenhum gasto registrado...</div>}
               </div>
             </section>
-
-            <section className="glass-panel p-6 rounded-2xl border-indigo-500/10">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-medieval text-indigo-300">۞ Grimório</h2>
-                {isEditing && (
-                  <div className="flex gap-2">
-                    <button onClick={() => setIsSpellDiscounted(!isSpellDiscounted)} className={`text-[8px] px-2 py-1 rounded font-bold border transition-colors ${isSpellDiscounted ? 'bg-indigo-600 border-indigo-400' : 'bg-slate-800 border-slate-700'}`}>50% OFF</button>
-                    <button onClick={() => setShowSpellForm(!showSpellForm)} className="text-[10px] px-2 py-1 bg-indigo-600 rounded font-bold transition-transform active:scale-95">+ NOVA</button>
-                  </div>
-                )}
-              </div>
-              {showSpellForm && (
-                <form onSubmit={handleAddSpell} className="mb-4 p-4 bg-indigo-950/20 rounded-xl border border-indigo-500/20 space-y-3 animate-in fade-in slide-in-from-top-4">
-                   <input name="name" placeholder="Nome da Magia" required className="w-full bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
-                   <div className="grid grid-cols-2 gap-2">
-                     <input name="cost" placeholder="Custo PM" required className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
-                     <select name="rank" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">{(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <option key={r} value={r}>{r} - {RANK_NAMES[r]}</option>)}</select>
-                   </div>
-                   <select name="origin" className="w-full bg-slate-800 p-2 rounded text-[10px] border border-slate-700"><option value="learned">Aprendida (Normal)</option><option value="created">Criada (Custo x2)</option></select>
-                   <textarea name="description" placeholder="Descrição da Magia..." required className="w-full bg-slate-800 p-2 rounded text-[10px] h-16 border border-slate-700" />
-                   <div className="flex items-center gap-2"><input type="checkbox" checked={isSpellInitialDuringCreation} onChange={e => setIsSpellInitialDuringCreation(e.target.checked)} className="rounded text-indigo-600" /><label className="text-[10px] text-indigo-300">Incial (Grátis)?</label></div>
-                   <button type="submit" className="w-full bg-indigo-600 py-1.5 rounded font-bold text-[10px] hover:bg-indigo-500">ADICIONAR</button>
-                </form>
-              )}
-              <div className="space-y-3">
-                {activeChar.spells.map((spell, idx) => (
-                  <div key={idx} className={`bg-indigo-950/20 p-3 rounded-xl border transition-all ${spell.initialRank ? 'border-green-500/30' : 'border-indigo-500/10'} hover:border-indigo-400/30`}>
-                    <div className="flex justify-between items-center">
-                      <div><h4 className="text-indigo-300 font-bold text-xs">{spell.name} {spell.isDiscounted ? '(Desc.)' : ''}</h4><span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span></div>
-                      <span className="text-[8px] bg-indigo-900/40 px-2 py-1 rounded font-bold border border-indigo-700/50">RK {spell.rank}</span>
-                    </div>
-                    {spell.description && <p className="text-[9px] text-slate-400 mt-1 italic leading-tight border-l-2 border-indigo-500/20 pl-2 whitespace-pre-wrap">"{spell.description}"</p>}
-                    {isEditing && <button onClick={() => handleRemoveSpell(idx)} className="text-[7px] text-red-500 mt-2 font-bold uppercase hover:underline">Esquecer</button>}
-                  </div>
-                ))}
-              </div>
-            </section>
           </div>
         </main>
 
@@ -804,7 +790,7 @@ const App: React.FC = () => {
           <div className="fixed bottom-10 inset-x-0 flex justify-center z-50 animate-in fade-in slide-in-from-bottom-8">
             <div className={`glass-panel px-12 py-6 rounded-3xl border-2 shadow-2xl ${rollResult.isDamage ? 'border-red-600 bg-red-950/20' : 'border-amber-500 bg-slate-900/90'}`}>
               <div className="text-center"><div className="text-[10px] uppercase font-bold text-amber-500 mb-1 tracking-tighter">{rollResult.name}</div><div className="text-6xl font-medieval text-white drop-shadow-md">{rollResult.total}</div></div>
-              <div className="text-[12px] text-slate-400 border-l border-slate-800 pl-10 space-y-2 flex flex-col justify-center"><div>Dado: {rollResult.roll}</div><div>Bônus: +{rollResult.bonus}</div></div>
+              <div className="text-[12px] text-slate-400 border-l border-slate-800 pl-10 space-y-2 flex flex-col justify-center"><div>{rollResult.isDamage ? 'Dados' : 'Dado'}: {rollResult.roll}</div><div>Bônus: +{rollResult.bonus}</div></div>
             </div>
           </div>
         )}
