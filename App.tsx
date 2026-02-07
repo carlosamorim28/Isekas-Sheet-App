@@ -421,6 +421,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteCharacter = (id: string, name: string) => {
+    if (window.confirm(`Tem certeza que deseja apagar permanentemente o herói ${name || 'sem nome'}?`)) {
+      const newChars = characters.filter(c => c.id !== id);
+      if (newChars.length === 0) {
+        setCharacters([createNewCharacterData("Ardrin Massafunda", "Geral")]);
+        setActiveIndex(0);
+      } else {
+        setCharacters(newChars);
+        // Ajusta o índice ativo para não quebrar a UI
+        if (activeIndex >= newChars.length) {
+          setActiveIndex(newChars.length - 1);
+        }
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen pb-20">
       <nav className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-amber-500/20 px-4 py-3 flex flex-col gap-3 shadow-lg">
@@ -448,10 +464,21 @@ const App: React.FC = () => {
               {filteredCharacters.length > 0 ? filteredCharacters.map((char) => {
                 const realIdx = characters.findIndex(c => c.id === char.id);
                 return (
-                  <button key={char.id} onClick={() => setActiveIndex(realIdx)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all border whitespace-nowrap ${activeIndex === realIdx ? 'bg-amber-600 border-amber-400 text-white shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-amber-500/40'}`}>
-                    <img src={char.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${char.name || 'default'}`} className="w-5 h-5 rounded-full object-cover" alt="" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">{char.name || "Aventureiro"}</span>
-                  </button>
+                  <div key={char.id} className="relative group shrink-0">
+                    <button onClick={() => setActiveIndex(realIdx)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all border whitespace-nowrap ${activeIndex === realIdx ? 'bg-amber-600 border-amber-400 text-white shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-amber-500/40'}`}>
+                      <img src={char.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${char.name || 'default'}`} className="w-5 h-5 rounded-full object-cover" alt="" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">{char.name || "Aventureiro"}</span>
+                    </button>
+                    {isEditing && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCharacter(char.id, char.name); }} 
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 text-white text-[8px] flex items-center justify-center rounded-full border border-slate-900 shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                        title="Excluir Herói"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 );
               }) : (
                 <span className="text-[10px] text-slate-600 italic px-2">Nenhum herói nesta pasta...</span>
@@ -479,7 +506,9 @@ const App: React.FC = () => {
               <div className="flex flex-col">
                 {isEditing ? (
                   <div className="flex flex-col gap-2">
-                    <input type="text" value={activeChar.name} onChange={e => updateActiveChar({...activeChar, name: e.target.value})} className="text-3xl font-cinzel font-bold text-amber-500 bg-transparent border-b border-amber-500/30 outline-none w-full" placeholder="Nome do Herói" />
+                    <div className="flex items-center gap-4">
+                       <input type="text" value={activeChar.name} onChange={e => updateActiveChar({...activeChar, name: e.target.value})} className="text-3xl font-cinzel font-bold text-amber-500 bg-transparent border-b border-amber-500/30 outline-none w-full" placeholder="Nome do Herói" />
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-slate-500 font-bold uppercase">Mover para:</span>
                       <select value={activeChar.folder || "Geral"} onChange={e => updateActiveChar({...activeChar, folder: e.target.value})} className="bg-slate-800 border border-slate-700 text-amber-500 text-[10px] px-2 py-1 rounded outline-none">
@@ -502,7 +531,15 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <button onClick={() => setIsEditing(!isEditing)} className={`px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-[11px] transition-all border-b-4 ${isEditing ? 'bg-green-600 border-green-800' : 'bg-amber-600 border-amber-800 active:translate-y-1 active:border-b-0'}`}>{isEditing ? '✓ SALVAR' : '⚔ EVOLUIR'}</button>
+            <button onClick={() => setIsEditing(!isEditing)} className={`px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-[11px] transition-all border-b-4 ${isEditing ? 'bg-green-600 border-green-800 shadow-[0_4px_0_rgb(22,101,52)]' : 'bg-amber-600 border-amber-800 shadow-[0_4px_0_rgb(146,64,14)] active:translate-y-1 active:shadow-none'}`}>{isEditing ? '✓ SALVAR' : '⚔ EVOLUIR'}</button>
+            {isEditing && (
+              <button 
+                onClick={() => handleDeleteCharacter(activeChar.id, activeChar.name)} 
+                className="px-8 py-2 rounded-xl font-bold uppercase tracking-widest text-[9px] bg-red-900/40 border border-red-800 text-red-400 hover:bg-red-800 hover:text-white transition-all"
+              >
+                🗑 Apagar Personagem
+              </button>
+            )}
           </div>
         </header>
 
