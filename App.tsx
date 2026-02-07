@@ -274,7 +274,11 @@ const App: React.FC = () => {
       cost: formData.get('cost') as string, 
       description: formData.get('description') as string, 
       origin, 
-      isDiscounted: isSpellDiscounted 
+      isDiscounted: isSpellDiscounted,
+      damage: formData.get('damage') as string || undefined,
+      damageBonus: parseInt(formData.get('damageBonus') as string) || 0,
+      relatedAttr1: formData.get('relatedAttr1') as string || undefined,
+      relatedAttr2: formData.get('relatedAttr2') as string || undefined
     };
     const newLogs = cost > 0 ? [{ id: crypto.randomUUID(), timestamp: Date.now(), description: `Aprendizado Magia (${origin === 'created' ? 'Criada' : 'Lida'}): ${newSpell.name} (Rank ${rank})`, cost }, ...(activeChar.xpLog || [])] : (activeChar.xpLog || []);
     updateActiveChar({ ...activeChar, spells: [...activeChar.spells, newSpell], xpLog: newLogs });
@@ -373,20 +377,18 @@ const App: React.FC = () => {
     handleRoll(`Ataque: ${item.name}`, bonus);
   };
 
-  const handleDamageRoll = (item: Item) => {
-    if (!item.damage) return;
-    const parts = item.damage.toLowerCase().replace(/\s/g, '').split('+');
+  const handleDamageRollLogic = (name: string, damageStr: string, staticBonus: number, attr1?: string, attr2?: string) => {
+    if (!damageStr) return;
+    const parts = damageStr.toLowerCase().replace(/\s/g, '').split('+');
     const dicePart = parts[0].split('d');
     const numDice = parseInt(dicePart[0]) || 1;
     const dieSize = parseInt(dicePart[1]) || 6;
     const baseStatic = parseInt(parts[1]) || 0;
     
     // Vínculos de atributos
-    const attr1Mod = item.relatedAttr1 ? getAttrMod(item.relatedAttr1) : 0;
-    const attr2Mod = item.relatedAttr2 ? getAttrMod(item.relatedAttr2) : 0;
-    const weaponBonus = item.damageBonus || 0;
-    
-    const totalStatic = baseStatic + attr1Mod + attr2Mod + weaponBonus;
+    const attr1Mod = attr1 ? getAttrMod(attr1) : 0;
+    const attr2Mod = attr2 ? getAttrMod(attr2) : 0;
+    const totalStatic = baseStatic + staticBonus + attr1Mod + attr2Mod;
 
     let totalRoll = 0;
     const rolls = [];
@@ -397,9 +399,17 @@ const App: React.FC = () => {
     }
     const finalTotal = totalRoll + totalStatic;
     const rollDisplay = rolls.join(' + ');
-    setRollResult({ name: `Dano: ${item.name}`, roll: rollDisplay, bonus: totalStatic, total: finalTotal, isDamage: true });
-    notifyDiscordRoll(activeChar.name, `Dano: ${item.name}`, finalTotal, rollDisplay, totalStatic);
+    setRollResult({ name, roll: rollDisplay, bonus: totalStatic, total: finalTotal, isDamage: true });
+    notifyDiscordRoll(activeChar.name, name, finalTotal, rollDisplay, totalStatic);
     setTimeout(() => setRollResult(null), 5000);
+  };
+
+  const handleDamageRoll = (item: Item) => {
+    handleDamageRollLogic(`Dano: ${item.name}`, item.damage || "", item.damageBonus || 0, item.relatedAttr1, item.relatedAttr2);
+  };
+
+  const handleSpellDamageRoll = (spell: Spell) => {
+    handleDamageRollLogic(`Dano (Magia): ${spell.name}`, spell.damage || "", spell.damageBonus || 0, spell.relatedAttr1, spell.relatedAttr2);
   };
 
   const handleRenameFolder = (oldName: string) => {
@@ -806,6 +816,23 @@ const App: React.FC = () => {
                      <input name="cost" placeholder="Custo PM" required className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
                      <select name="rank" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">{(['E', 'D', 'C', 'B', 'A', 'S'] as ProficiencyRank[]).map(r => <option key={r} value={r}>{r} - {RANK_NAMES[r]}</option>)}</select>
                    </div>
+                   
+                   <div className="grid grid-cols-2 gap-2">
+                      <input name="damage" placeholder="Dano (Ex: 2d6)" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
+                      <input name="damageBonus" type="number" placeholder="Bônus Fixo" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700" />
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-2">
+                      <select name="relatedAttr1" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
+                        <option value="">Vínculo Attr 1</option>
+                        {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                      </select>
+                      <select name="relatedAttr2" className="bg-slate-800 p-2 rounded text-[10px] border border-slate-700">
+                        <option value="">Vínculo Attr 2</option>
+                        {activeChar.attributes.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                      </select>
+                   </div>
+
                    <select name="origin" className="w-full bg-slate-800 p-2 rounded text-[10px] border border-slate-700"><option value="learned">Aprendida (Normal)</option><option value="created">Criada (Custo x2)</option></select>
                    <textarea name="description" placeholder="Descrição da Magia..." required className="w-full bg-slate-800 p-2 rounded text-[10px] h-16 border border-slate-700" />
                    <div className="flex items-center gap-2"><input type="checkbox" checked={isSpellInitialDuringCreation} onChange={e => setIsSpellInitialDuringCreation(e.target.checked)} className="rounded text-indigo-600" /><label className="text-[10px] text-indigo-300">Incial (Grátis)?</label></div>
@@ -816,9 +843,24 @@ const App: React.FC = () => {
                 {activeChar.spells.map((spell, idx) => (
                   <div key={idx} className={`bg-indigo-950/20 p-3 rounded-xl border transition-all ${spell.initialRank ? 'border-green-500/30' : 'border-indigo-500/10'} hover:border-indigo-400/30`}>
                     <div className="flex justify-between items-center">
-                      <div><h4 className="text-indigo-300 font-bold text-xs">{spell.name} {spell.isDiscounted ? '(Desc.)' : ''}</h4><span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span></div>
-                      <span className="text-[8px] bg-indigo-900/40 px-2 py-1 rounded font-bold border border-indigo-700/50">RK {spell.rank}</span>
+                      <div>
+                        <h4 className="text-indigo-300 font-bold text-xs">{spell.name} {spell.isDiscounted ? '(Desc.)' : ''}</h4>
+                        <span className="text-[8px] text-indigo-500 font-bold">{spell.cost}</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <span className="text-[8px] bg-indigo-900/40 px-2 py-1 rounded font-bold border border-indigo-700/50">RK {spell.rank}</span>
+                        {spell.damage && (
+                          <button onClick={() => handleSpellDamageRoll(spell)} className="text-[8px] bg-red-900/60 px-2 py-1 rounded font-bold border border-red-700/50 text-red-200 hover:bg-red-800">DANO</button>
+                        )}
+                      </div>
                     </div>
+                    {spell.damage && (
+                       <div className="text-[8px] text-red-400 font-bold mt-1 uppercase">
+                          💥 {spell.damage} {spell.damageBonus ? `+ ${spell.damageBonus}` : ''} 
+                          {spell.relatedAttr1 && ` + ${spell.relatedAttr1.substring(0,3)}`}
+                          {spell.relatedAttr2 && ` + ${spell.relatedAttr2.substring(0,3)}`}
+                       </div>
+                    )}
                     {spell.description && <p className="text-[9px] text-slate-400 mt-1 italic leading-tight border-l-2 border-indigo-500/20 pl-2 whitespace-pre-wrap">"{spell.description}"</p>}
                     {isEditing && <button onClick={() => handleRemoveSpell(idx)} className="text-[7px] text-red-500 mt-2 font-bold uppercase hover:underline">Esquecer</button>}
                   </div>

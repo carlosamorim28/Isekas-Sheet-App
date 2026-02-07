@@ -35,6 +35,10 @@ export interface Spell {
   description: string;
   origin: 'learned' | 'created';
   isDiscounted?: boolean;
+  damage?: string;
+  damageBonus?: number;
+  relatedAttr1?: string;
+  relatedAttr2?: string;
 }
 
 export interface Ability {
