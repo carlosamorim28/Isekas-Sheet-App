@@ -53,12 +53,6 @@ export interface Item {
   specialAbility?: string;
   weight?: number;
   isEquipped?: boolean;
-  // Campos para Armas
-  attackBonus?: number;
-  damageBonus?: number;
-  relatedSkillName?: string;
-  relatedAttr1?: string;
-  relatedAttr2?: string;
 }
 
 export interface CharacterData {
