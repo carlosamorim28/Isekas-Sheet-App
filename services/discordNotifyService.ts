@@ -13,8 +13,8 @@ ${separator}
 👤 **HERÓI:** \`${charName?.toUpperCase() || 'AVENTUREIRO'}\`
 🎲 **ROLAGEM:** *${testName}*
 
-# 🏆 TOTAL: **${total}**
-> 📊 **Detalhes:** (🎲 ${rollValue} + ➕ Bônus: ${bonus})
+🏆 TOTAL: **${total}**
+> 📊 **Detalhes:** (🎲 ${rollValue} + Bônus: ${bonus})
 ${separator}
   `.trim();
 
