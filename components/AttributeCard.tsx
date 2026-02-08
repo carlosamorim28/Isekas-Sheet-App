@@ -14,13 +14,13 @@ interface Props {
 }
 
 export const calculateMod = (val: number) => {
-  if (val >= 100) return 10;
+  // Removido o limite fixo de 10 para permitir progressão infinita
   if (val < 0) return 0;
   return Math.floor(val / 10);
 };
 
 export const AttributeCard: React.FC<Props> = ({ attr, onRoll, isEditing, onUpgrade, onDowngrade, onRacialChange, xpCost, canAfford }) => {
-  // O modificador é calculado sobre a SOMA do valor base + bônus racial
+  // O modificador é calculado sobre a SOMA do valor base + bônus inicial (racial)
   const totalValue = attr.value + attr.racialBonus;
   const mod = calculateMod(totalValue);
   const totalMod = mod + attr.bonusFromItems;
