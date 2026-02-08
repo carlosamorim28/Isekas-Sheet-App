@@ -6,7 +6,17 @@ export async function notifyDiscordRoll(
   rollValue: number | string, 
   bonus: number
 ) {
-  const content = `🛡️ **${charName || 'Aventureiro'}** rolou **${testName}**\n📊 **Total: ${total}** (Dado: ${rollValue} + Bônus: ${bonus})`;
+  // Construindo uma mensagem com blocos visuais e separadores para o Discord
+  const separator = "──────────────────────────────────";
+  const content = `
+${separator}
+👤 **HERÓI:** \`${charName?.toUpperCase() || 'AVENTUREIRO'}\`
+🎲 **ROLAGEM:** *${testName}*
+
+# 🏆 TOTAL: **${total}**
+> 📊 **Detalhes:** (🎲 ${rollValue} + ➕ Bônus: ${bonus})
+${separator}
+  `.trim();
 
   try {
     const response = await fetch('https://discord-sender--carlosjorge2611.replit.app/api/trigger-discord', {
